@@ -2,7 +2,10 @@
 cmds = ["npm ci --include=dev"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+  "npm run build",
+  "cp -r .medusa/server/public ./public"
+]
 
 [start]
 cmd = "npm run start"
