@@ -1,0 +1,64 @@
+diff --git a/node_modules/@agilo/medusa-analytics-plugin/.medusa/server/src/api/admin/agilo-analytics/orders/route.js b/node_modules/@agilo/medusa-analytics-plugin/.medusa/server/src/api/admin/agilo-analytics/orders/route.js
+index 4d71900..1597794 100644
+--- a/node_modules/@agilo/medusa-analytics-plugin/.medusa/server/src/api/admin/agilo-analytics/orders/route.js
++++ b/node_modules/@agilo/medusa-analytics-plugin/.medusa/server/src/api/admin/agilo-analytics/orders/route.js
+@@ -71,16 +71,29 @@ async function GET(req, res) {
+         ?.currency_code?.toUpperCase() || DEFAULT_CURRENCY;
+     const cacheKey = `exchange_rates_${currencyCode}`;
+     let exchangeRates = await cacheModuleService.get(cacheKey);
+-    if (!exchangeRates) {
+-        const response = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currencyCode}`);
+-        exchangeRates = await response.json();
++    if (!exchangeRates || !exchangeRates.rates) {
++        try {
++            const response = await fetch(`https://open.er-api.com/v6/latest/${currencyCode}`);
++            const data = await response.json();
++            if (data && data.rates) {
++                exchangeRates = data;
++            } else {
++                const fallback = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currencyCode}`);
++                exchangeRates = await fallback.json();
++            }
++        } catch (e) {
++            exchangeRates = { rates: {} };
++        }
++        if (!exchangeRates || !exchangeRates.rates) {
++            exchangeRates = { rates: {} };
++        }
+         const now = luxon_1.DateTime.now().setZone('Europe/Berlin');
+         let expireAt = now.set({ hour: 16, minute: 0, second: 0, millisecond: 0 });
+         if (now >= expireAt) {
+             expireAt = expireAt.plus({ days: 1 });
+         }
+         const ttl = Math.floor(expireAt.diff(now, 'seconds').seconds);
+-        await cacheModuleService.set(cacheKey, exchangeRates, ttl);
++        await cacheModuleService.set(cacheKey, exchangeRates, ttl > 0 ? ttl : 86400);
+     }
+     const calculateDateRange = orders_1.calculateDateRangeMethod[validatedQuery.preset];
+     if (!calculateDateRange) {
+@@ -112,9 +125,10 @@ async function GET(req, res) {
+     let statuses = {};
+     const groupedByKey = {};
+     for (const order of orders) {
+-        const exchangeRate = order.currency_code.toUpperCase() !== currencyCode
+-            ? exchangeRates?.rates[order.currency_code.toUpperCase()]
++        const rate = order.currency_code.toUpperCase() !== currencyCode
++            ? exchangeRates?.rates?.[order.currency_code.toUpperCase()]
+             : 1;
++        const exchangeRate = typeof rate === 'number' && rate > 0 ? rate : 1;
+         const orderTotal = new utils_1.BigNumber(order.total).numeric / exchangeRate;
+         const key = (0, orders_1.getDateGroupingKey)(new Date(order.created_at), groupBy, currentFrom, currentTo);
+         if (!groupedByKey[key]) {
+@@ -133,9 +147,10 @@ async function GET(req, res) {
+     }
+     let prevTotalSales = 0;
+     for (const order of prevRangeOrders) {
+-        const exchangeRate = order.currency_code.toUpperCase() !== currencyCode
+-            ? exchangeRates?.rates[order.currency_code.toUpperCase()]
++        const prevRate = order.currency_code.toUpperCase() !== currencyCode
++            ? exchangeRates?.rates?.[order.currency_code.toUpperCase()]
+             : 1;
++        const exchangeRate = typeof prevRate === 'number' && prevRate > 0 ? prevRate : 1;
+         const orderTotal = new utils_1.BigNumber(order.total).numeric / exchangeRate;
+         prevTotalSales += orderTotal;
+     }
