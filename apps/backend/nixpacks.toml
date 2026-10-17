@@ -4,7 +4,7 @@ cmds = ["npm ci --include=dev --legacy-peer-deps"]
 [phases.build]
 cmds = [
   "npm run build",
-  "cp -r .medusa/server/public ./public"
+  "rm -rf ./public/admin && cp -r .medusa/server/public/admin ./public/admin"
 ]
 
 [start]
