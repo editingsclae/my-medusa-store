@@ -1,5 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
 import {
   createSalesChannelsWorkflow,
   createStockLocationsWorkflow,
@@ -158,6 +158,30 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     },
   })
   const merchantUser = userResult[0]
+
+  // 7. If password was provided, register emailpass auth identity and link to user
+  if (body.password) {
+    try {
+      const authService = req.scope.resolve(Modules.AUTH)
+      const authRes = await authService.register("emailpass", {
+        body: {
+          email: merchantEmail,
+          password: body.password,
+        },
+      } as any)
+
+      if (authRes.success && authRes.authIdentity) {
+        await authService.updateAuthIdentities({
+          id: authRes.authIdentity.id,
+          app_metadata: {
+            user_id: merchantUser.id,
+          },
+        })
+      }
+    } catch (authErr) {
+      console.warn("Could not register password auth identity:", authErr)
+    }
+  }
 
   res.status(201).json({
     message: "Merchant created successfully",
