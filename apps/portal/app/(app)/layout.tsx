@@ -7,8 +7,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div
       style={{
         display: 'flex',
-        flexWrap: 'wrap',
-        alignContent: 'flex-start',
         minHeight: '100vh',
         background: '#F6F7F9',
         fontFamily: 'Urbanist, sans-serif',
@@ -16,7 +14,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       <Sidebar />
-      <main style={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '100vh',
+        }}
+      >
         <TopBar />
         {children}
       </main>

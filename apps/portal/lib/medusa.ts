@@ -234,18 +234,40 @@ export async function deleteMerchantProduct(id: string): Promise<{ id: string; o
 // Media Upload (Cloudflare R2)
 export async function uploadMerchantMedia(file: File): Promise<{ url: string; key: string }> {
   const formData = new FormData()
+  formData.append("files", file)
   formData.append("file", file)
 
-  const res = await apiFetch<{ files: { url: string; key: string }[] }>("/admin/merchant/upload", {
+  // 1. Try scoped merchant upload endpoint first
+  try {
+    const res = await apiFetch<{ files?: { url: string; id?: string; key?: string }[] }>("/admin/merchant/upload", {
+      method: "POST",
+      body: formData,
+    })
+
+    if (res.files?.[0]?.url) {
+      return {
+        url: res.files[0].url,
+        key: res.files[0].id || res.files[0].key || "",
+      }
+    }
+  } catch (err: any) {
+    console.warn("Merchant upload route failed, attempting fallback to /admin/uploads:", err?.message || err)
+  }
+
+  // 2. Fallback to Medusa admin uploads endpoint
+  const fallbackRes = await apiFetch<{ files?: { url: string; id?: string; key?: string }[] }>("/admin/uploads", {
     method: "POST",
     body: formData,
   })
 
-  if (!res.files?.[0]) {
-    throw new Error("Upload failed: No file returned")
+  if (!fallbackRes.files?.[0]?.url) {
+    throw new Error("Upload failed: No file returned from storage")
   }
 
-  return res.files[0]
+  return {
+    url: fallbackRes.files[0].url,
+    key: fallbackRes.files[0].id || fallbackRes.files[0].key || "",
+  }
 }
 
 // Orders

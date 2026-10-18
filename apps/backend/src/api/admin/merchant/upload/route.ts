@@ -6,11 +6,8 @@ import { getMerchantContext } from "../utils"
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   await getMerchantContext(req)
 
-  const files = (req as any).files as Array<{
-    originalname: string
-    buffer: Buffer
-    mimetype: string
-  }>
+  const rawFiles = (req as any).files || ((req as any).file ? [(req as any).file] : [])
+  const files = Array.isArray(rawFiles) ? rawFiles : [rawFiles]
 
   if (!files || !files.length) {
     throw new MedusaError(
@@ -21,9 +18,9 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const { result } = await uploadFilesWorkflow(req.scope).run({
     input: {
-      files: files.map((f) => ({
+      files: files.map((f: any) => ({
         filename: f.originalname,
-        content: f.buffer.toString("binary"),
+        content: f.buffer.toString("base64"),
         mimeType: f.mimetype,
         access: "public",
       })),

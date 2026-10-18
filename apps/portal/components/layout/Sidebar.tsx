@@ -28,12 +28,20 @@ export default function Sidebar() {
     <aside
       className="dl-side"
       style={{
+        width: '244px',
+        minWidth: '244px',
         flex: '0 0 244px',
+        minHeight: '100vh',
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: '#060A19',
         color: '#FFFFFF',
+        overflowY: 'auto',
+        zIndex: 50,
       }}
     >
       {/* Logo Row */}

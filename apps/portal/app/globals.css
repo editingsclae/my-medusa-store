@@ -47,6 +47,11 @@ button:focus-visible {
 /* Sidebar stacks full-width on narrow screens */
 @media (max-width: 803px) {
   .dl-side {
+    position: static !important;
+    height: auto !important;
+    min-height: auto !important;
+    width: 100% !important;
+    min-width: 100% !important;
     flex-basis: 100% !important;
   }
 }
