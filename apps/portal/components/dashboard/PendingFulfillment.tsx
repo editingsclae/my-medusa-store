@@ -1,9 +1,24 @@
+'use client';
+
 import React from 'react';
-import { PENDING_STAGES_DATA } from '@/lib/dashboard-data';
+import Link from 'next/link';
 import { ArrowRightIcon } from '@/components/icons';
 
-export default function PendingFulfillment() {
-  const total = 37;
+interface PendingFulfillmentProps {
+  pendingCount?: number;
+  fulfilledCount?: number;
+}
+
+export default function PendingFulfillment({
+  pendingCount = 0,
+  fulfilledCount = 0,
+}: PendingFulfillmentProps) {
+  const total = pendingCount + fulfilledCount;
+
+  const stages = [
+    { label: 'Awaiting shipping', count: pendingCount },
+    { label: 'Fulfilled & shipped', count: fulfilledCount },
+  ];
 
   return (
     <div
@@ -41,71 +56,82 @@ export default function PendingFulfillment() {
             color: '#4B5263',
           }}
         >
-          37 orders waiting, by stage
+          {pendingCount === 1 ? '1 order waiting' : `${pendingCount} orders waiting, by stage`}
         </p>
       </div>
 
-      {/* Stages */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {PENDING_STAGES_DATA.map((stage) => {
-          const widthPct = ((stage.count / total) * 100).toFixed(2);
-          return (
-            <div key={stage.label} style={{ display: 'flex', flexDirection: 'column' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  lineHeight: '24px',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: '16px',
-                    fontWeight: 500,
-                    color: '#111827',
-                  }}
-                >
-                  {stage.label}
-                </span>
-                <span
-                  style={{
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: '#111827',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}
-                >
-                  {stage.count}
-                </span>
-              </div>
-              <div
-                style={{
-                  height: '8px',
-                  marginTop: '8px',
-                  borderRadius: '4px',
-                  overflow: 'hidden',
-                  background: 'color-mix(in srgb, var(--accent) 12%, white)',
-                }}
-              >
+      {/* Stages or Clean Empty State */}
+      {total === 0 ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#6B7280' }}>
+          <p style={{ margin: 0, fontSize: '15px', fontWeight: 500 }}>
+            All caught up!
+          </p>
+          <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#9CA3AF' }}>
+            No incoming orders currently require fulfillment.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {stages.map((stage) => {
+            const widthPct = total > 0 ? ((stage.count / total) * 100).toFixed(2) : '0';
+            return (
+              <div key={stage.label} style={{ display: 'flex', flexDirection: 'column' }}>
                 <div
                   style={{
-                    height: '100%',
-                    width: `${widthPct}%`,
-                    borderRadius: '0 4px 4px 0',
-                    background: 'var(--accent)',
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    lineHeight: '24px',
                   }}
-                />
+                >
+                  <span
+                    style={{
+                      fontSize: '16px',
+                      fontWeight: 500,
+                      color: '#111827',
+                    }}
+                  >
+                    {stage.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      color: '#111827',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {stage.count}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: '8px',
+                    marginTop: '8px',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    background: 'color-mix(in srgb, var(--accent) 12%, white)',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${widthPct}%`,
+                      borderRadius: '0 4px 4px 0',
+                      background: 'var(--accent)',
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Footer Link */}
       <div style={{ marginTop: 'auto', paddingTop: '8px' }}>
-        <a
-          href="#"
+        <Link
+          href="/orders"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -118,7 +144,7 @@ export default function PendingFulfillment() {
         >
           View orders
           <ArrowRightIcon />
-        </a>
+        </Link>
       </div>
     </div>
   );

@@ -166,11 +166,17 @@ export default function DashboardPage() {
           }}
         >
           <RevenueChart data={dailyData} />
-          <PendingFulfillment />
+          <PendingFulfillment
+            pendingCount={analytics?.pending_orders}
+            fulfilledCount={analytics?.fulfilled_orders}
+          />
         </div>
 
         {/* 3) Top products card */}
-        <TopProducts />
+        <TopProducts
+          products={analytics?.top_products}
+          currencyCode={analytics?.currency_code}
+        />
       </div>
 
       {/* Add Product Modal */}
