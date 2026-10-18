@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --accent: #7C5CFC;
+}
+
+body {
+  margin: 0;
+  background: #F6F7F9;
+  font-family: 'Urbanist', sans-serif;
+  color: #111827;
+}
+
+input::placeholder {
+  color: #8A90A0;
+  opacity: 1;
+}
+
+button {
+  font-family: inherit;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dl-field:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.18);
+}
+
+.dl-chart:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+/* Hide brand panel feature list on narrow screens */
+@media (max-width: 999px) {
+  .dl-extra {
+    display: none !important;
+  }
+}
+
+/* Sidebar stacks full-width on narrow screens */
+@media (max-width: 803px) {
+  .dl-side {
+    flex-basis: 100% !important;
+  }
+}

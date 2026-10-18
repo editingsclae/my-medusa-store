@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --accent: #7C5CFC;
+}
+
+body {
+  margin: 0;
+  background: #F6F7F9;
+  font-family: 'Urbanist', sans-serif;
+  color: #111827;
+}
+
+input::placeholder {
+  color: #8A90A0;
+  opacity: 1;
+}
+
+button {
+  font-family: inherit;
+}
+
+@media (max-width: 803px) {
+  .dl-side {
+    flex-basis: 100% !important;
+  }
+}
