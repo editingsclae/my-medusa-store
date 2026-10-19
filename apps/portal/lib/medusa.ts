@@ -254,41 +254,27 @@ export async function updateMerchantProduct(
 }
 
 // Media Upload (Cloudflare R2)
+// Single upload — appends file once under "files" field only.
+// No silent fallback: if the merchant endpoint succeeds but returns no URL we throw immediately
+// rather than calling a second endpoint and uploading to R2 a second time.
 export async function uploadMerchantMedia(file: File): Promise<{ url: string; key: string }> {
   const formData = new FormData()
+  // IMPORTANT: append the file exactly ONCE. Appending under two field names
+  // caused multer's upload.any() to receive two entries and upload duplicates to R2.
   formData.append("files", file)
-  formData.append("file", file)
 
-  // 1. Try scoped merchant upload endpoint first
-  try {
-    const res = await apiFetch<{ files?: { url: string; id?: string; key?: string }[] }>("/admin/merchant/upload", {
-      method: "POST",
-      body: formData,
-    })
-
-    if (res.files?.[0]?.url) {
-      return {
-        url: res.files[0].url,
-        key: res.files[0].id || res.files[0].key || "",
-      }
-    }
-  } catch (err: any) {
-    console.warn("Merchant upload route failed, attempting fallback to /admin/uploads:", err?.message || err)
-  }
-
-  // 2. Fallback to Medusa admin uploads endpoint
-  const fallbackRes = await apiFetch<{ files?: { url: string; id?: string; key?: string }[] }>("/admin/uploads", {
+  const res = await apiFetch<{ files?: { url: string; id?: string; key?: string }[] }>("/admin/merchant/upload", {
     method: "POST",
     body: formData,
   })
 
-  if (!fallbackRes.files?.[0]?.url) {
-    throw new Error("Upload failed: No file returned from storage")
+  if (!res.files?.[0]?.url) {
+    throw new Error("Upload failed: No file URL returned from storage")
   }
 
   return {
-    url: fallbackRes.files[0].url,
-    key: fallbackRes.files[0].id || fallbackRes.files[0].key || "",
+    url: res.files[0].url,
+    key: res.files[0].id || res.files[0].key || "",
   }
 }
 
