@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
-import { createProductsWorkflow } from "@medusajs/core-flows"
+import { createProductsWorkflow, createInventoryLevelsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../utils"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -50,6 +50,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "variants.sku",
       "variants.prices.*",
       "variants.options.*",
+      "variants.inventory_items.inventory.id",
+      "variants.inventory_items.inventory.location_levels.*",
       "options.*",
     ],
     filters,
@@ -62,9 +64,31 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
+  // Compute inventory_quantity for each variant from its location_levels
+  const enhancedProducts = (products || []).map((product: any) => {
+    const variants = (product.variants || []).map((v: any) => {
+      let totalStock = 0
+      const inventoryItems = v.inventory_items || []
+      for (const item of inventoryItems) {
+        const levels = item.inventory?.location_levels || []
+        for (const level of levels) {
+          totalStock += Number(level.stocked_quantity || 0)
+        }
+      }
+      return {
+        ...v,
+        inventory_quantity: totalStock,
+      }
+    })
+    return {
+      ...product,
+      variants,
+    }
+  })
+
   res.json({
-    products,
-    count: metadata?.count ?? products.length,
+    products: enhancedProducts,
+    count: metadata?.count ?? enhancedProducts.length,
     limit,
     offset,
   })
@@ -72,6 +96,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const body = req.body as any
 
   if (!body.title) {
@@ -87,6 +112,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       "Cannot create product without an assigned sales channel"
     )
   }
+
+  const initialStock = body.inventory_quantity !== undefined ? Number(body.inventory_quantity) : 10
 
   // Format product input for createProductsWorkflow
   const productInput: any = {
@@ -114,6 +141,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     productInput.variants = body.variants.map((v: any) => ({
       title: v.title || "Default Variant",
       sku: v.sku,
+      manage_inventory: true,
       prices: v.prices || [
         {
           currency_code: (v.currency_code || context.currencyCode).toLowerCase(),
@@ -128,6 +156,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       {
         title: "Default Variant",
         sku: body.sku,
+        manage_inventory: true,
         prices: [
           {
             currency_code: (body.currency_code || context.currencyCode).toLowerCase(),
@@ -145,7 +174,50 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
+  const createdProduct = result[0]
+
+  // If a stock quantity was specified and a stock location is available, create inventory levels
+  if (context.stockLocationId && initialStock >= 0 && createdProduct?.id) {
+    try {
+      // Query created variant's inventory item
+      const { data: freshProducts } = await query.graph({
+        entity: "product",
+        fields: [
+          "id",
+          "variants.id",
+          "variants.inventory_items.inventory.id",
+        ],
+        filters: { id: createdProduct.id },
+      })
+
+      const invLevelsToCreate: { inventory_item_id: string; location_id: string; stocked_quantity: number }[] = []
+      const freshVariants = freshProducts?.[0]?.variants || []
+
+      for (const fv of freshVariants) {
+        for (const item of ((fv as any).inventory_items || [])) {
+          if (item && item.inventory && item.inventory.id) {
+            invLevelsToCreate.push({
+              inventory_item_id: item.inventory.id,
+              location_id: context.stockLocationId,
+              stocked_quantity: initialStock,
+            })
+          }
+        }
+      }
+
+      if (invLevelsToCreate.length > 0) {
+        await createInventoryLevelsWorkflow(req.scope).run({
+          input: {
+            inventory_levels: invLevelsToCreate,
+          },
+        })
+      }
+    } catch (invErr) {
+      console.warn("Failed to set initial inventory levels:", invErr)
+    }
+  }
+
   res.status(201).json({
-    product: result[0],
+    product: createdProduct,
   })
 }

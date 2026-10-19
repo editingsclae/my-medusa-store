@@ -60,13 +60,30 @@ export async function getMerchantContext(req: MedusaRequest): Promise<MerchantCo
 
   // Fetch sales channel info if channel ID is present
   let salesChannel: any = null
+  let resolvedStockLocationId = user.metadata?.stock_location_id as string | undefined
+
   if (salesChannelId) {
     const { data: channels } = await query.graph({
       entity: "sales_channel",
-      fields: ["id", "name", "description", "is_disabled"],
+      fields: ["id", "name", "description", "is_disabled", "stock_locations.id"],
       filters: { id: salesChannelId },
     })
     salesChannel = channels?.[0]
+    if (!resolvedStockLocationId && salesChannel?.stock_locations?.length) {
+      resolvedStockLocationId = salesChannel.stock_locations[0].id
+    }
+  }
+
+  // Fallback to any available stock location if not linked yet
+  if (!resolvedStockLocationId) {
+    const { data: locations } = await query.graph({
+      entity: "stock_location",
+      fields: ["id"],
+      pagination: { take: 1, skip: 0 },
+    })
+    if (locations?.length) {
+      resolvedStockLocationId = locations[0].id
+    }
   }
 
   // Get default store currency
@@ -79,7 +96,7 @@ export async function getMerchantContext(req: MedusaRequest): Promise<MerchantCo
     isSuperAdmin,
     salesChannelId: salesChannelId || "",
     salesChannel,
-    stockLocationId: user.metadata?.stock_location_id as string | undefined,
+    stockLocationId: resolvedStockLocationId,
     currencyCode: defaultCurrency,
   }
 }
