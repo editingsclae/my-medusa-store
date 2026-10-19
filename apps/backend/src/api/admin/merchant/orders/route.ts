@@ -35,6 +35,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "total",
       "currency_code",
       "email",
+      "sales_channel.id",
+      "sales_channel.name",
       "customer.id",
       "customer.first_name",
       "customer.last_name",

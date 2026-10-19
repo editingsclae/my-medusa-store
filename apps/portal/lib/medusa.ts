@@ -71,16 +71,47 @@ export interface MerchantOrderLineItem {
   quantity: number
   unit_price: number
   thumbnail?: string | null
+  variant_title?: string | null
+  variant_sku?: string | null
+  variant?: {
+    id?: string
+    title?: string
+    sku?: string
+  }
 }
 
 export interface MerchantOrder {
   id: string
   display_id?: number
   status: string
+  email?: string
+  payment_status?: string
+  fulfillment_status?: string
   created_at: string
   currency_code: string
   total: number
+  subtotal?: number
+  item_subtotal?: number
+  item_total?: number
+  item_tax_total?: number
+  original_total?: number
+  tax_total?: number
+  shipping_total?: number
+  shipping_subtotal?: number
+  discount_total?: number
+  sales_channel_id?: string
+  sales_channel?: {
+    id?: string
+    name?: string
+  }
+  shipping_methods?: {
+    id: string
+    name?: string
+    amount: number
+    shipping_option_id?: string
+  }[]
   customer?: {
+    id?: string
     email: string
     first_name?: string | null
     last_name?: string | null
@@ -90,15 +121,41 @@ export interface MerchantOrder {
     first_name?: string | null
     last_name?: string | null
     address_1?: string | null
+    address_2?: string | null
     city?: string | null
     postal_code?: string | null
     country_code?: string | null
+    phone?: string | null
+  }
+  billing_address?: {
+    first_name?: string | null
+    last_name?: string | null
+    address_1?: string | null
+    address_2?: string | null
+    city?: string | null
+    postal_code?: string | null
+    country_code?: string | null
+    phone?: string | null
   }
   items?: MerchantOrderLineItem[]
   fulfillments?: {
     id: string
     shipped_at?: string | null
+    delivered_at?: string | null
+    canceled_at?: string | null
+    created_at?: string
     labels?: { tracking_number: string; tracking_url?: string }[]
+    items?: { id: string; quantity: number; line_item_id?: string }[]
+  }[]
+  payment_collections?: {
+    payments?: {
+      id: string
+      amount: number
+      currency_code: string
+      provider_id?: string
+      captured_at?: string | null
+      created_at?: string
+    }[]
   }[]
 }
 
@@ -295,9 +352,20 @@ export async function getMerchantOrder(id: string): Promise<{ order: MerchantOrd
   return apiFetch<{ order: MerchantOrder }>(`/admin/merchant/orders/${id}`)
 }
 
+export async function getFulfillmentContext(orderId: string): Promise<{
+  location_id: string | null
+  location_name: string
+  shipping_methods: { id: string; name?: string; shipping_option_id?: string; amount: number }[]
+  items: { id: string; title: string; quantity: number; unit_price: number; variant_title?: string | null; thumbnail?: string | null }[]
+}> {
+  return apiFetch(`/admin/merchant/orders/${orderId}/fulfillments`)
+}
+
 export async function fulfillMerchantOrder(
   orderId: string,
   data: {
+    location_id?: string
+    shipping_option_id?: string
     tracking_number?: string
     tracking_url?: string
     items?: { id: string; quantity: number }[]
@@ -306,6 +374,46 @@ export async function fulfillMerchantOrder(
   return apiFetch<{ fulfillment: any }>(`/admin/merchant/orders/${orderId}/fulfillments`, {
     method: "POST",
     body: JSON.stringify(data),
+  })
+}
+
+export async function shipMerchantOrder(
+  orderId: string,
+  data: {
+    fulfillment_id?: string
+    tracking_number?: string
+    tracking_url?: string
+    items?: { id: string; quantity: number }[]
+  }
+): Promise<{ shipment: any }> {
+  return apiFetch<{ shipment: any }>(`/admin/merchant/orders/${orderId}/shipments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deliverMerchantOrder(
+  orderId: string,
+  data?: {
+    fulfillment_id?: string
+  }
+): Promise<{ result: any }> {
+  return apiFetch<{ result: any }>(`/admin/merchant/orders/${orderId}/deliver`, {
+    method: "POST",
+    body: JSON.stringify(data || {}),
+  })
+}
+
+export async function captureMerchantPayment(
+  orderId: string,
+  data?: {
+    payment_id?: string
+    amount?: number
+  }
+): Promise<{ payment: any }> {
+  return apiFetch<{ payment: any }>(`/admin/merchant/orders/${orderId}/capture-payment`, {
+    method: "POST",
+    body: JSON.stringify(data || {}),
   })
 }
 
