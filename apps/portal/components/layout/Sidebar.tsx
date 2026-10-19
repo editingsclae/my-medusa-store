@@ -55,12 +55,12 @@ export default function Sidebar() {
           borderBottom: '1px solid #1B2135',
         }}
       >
-        <svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="Delisas logo" style={{ flex: 'none' }}>
+        <svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="Vysas logo" style={{ flex: 'none' }}>
           <circle cx="20" cy="20" r="20" fill="#1F1B4D" />
           <path d="M26.5 14 A9 9 0 1 0 26.5 26" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" />
           <circle cx="27.5" cy="27.5" r="3.5" fill="var(--accent)" />
         </svg>
-        <span style={{ fontSize: '24px', fontWeight: 600, lineHeight: 1 }}>Delisas</span>
+        <span style={{ fontSize: '24px', fontWeight: 600, lineHeight: 1 }}>Vysas</span>
       </div>
 
       {/* Nav */}
