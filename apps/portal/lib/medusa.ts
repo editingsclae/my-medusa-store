@@ -35,6 +35,8 @@ export interface MerchantAnalytics {
   top_products: {
     title: string
     quantity: number
+    thumbnail?: string | null
+    thumbnailUrl?: string | null
   }[]
 }
 
@@ -319,4 +321,51 @@ export async function fulfillMerchantOrder(
     method: "POST",
     body: JSON.stringify(data),
   })
+}
+
+// Customers
+export interface CustomerAddress {
+  id?: string
+  first_name?: string | null
+  last_name?: string | null
+  company?: string | null
+  address_1?: string | null
+  address_2?: string | null
+  city?: string | null
+  province?: string | null
+  postal_code?: string | null
+  country_code?: string | null
+  phone?: string | null
+}
+
+export interface MerchantCustomer {
+  id: string
+  email: string
+  first_name?: string | null
+  last_name?: string | null
+  name?: string
+  phone?: string | null
+  has_account?: boolean
+  account_status?: "Registered" | "Guest"
+  created_at: string
+  addresses?: CustomerAddress[]
+  orders?: MerchantOrder[]
+}
+
+export async function getMerchantCustomers(params?: {
+  limit?: number
+  offset?: number
+  q?: string
+}): Promise<{ customers: MerchantCustomer[]; count: number }> {
+  const qParams = new URLSearchParams()
+  if (params?.limit) qParams.set("limit", String(params.limit))
+  if (params?.offset) qParams.set("offset", String(params.offset))
+  if (params?.q) qParams.set("q", params.q)
+
+  const queryString = qParams.toString() ? `?${qParams.toString()}` : ""
+  return apiFetch<{ customers: MerchantCustomer[]; count: number }>(`/admin/merchant/customers${queryString}`)
+}
+
+export async function getMerchantCustomer(id: string): Promise<{ customer: MerchantCustomer; orders: MerchantOrder[] }> {
+  return apiFetch<{ customer: MerchantCustomer; orders: MerchantOrder[] }>(`/admin/merchant/customers/${id}`)
 }

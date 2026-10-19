@@ -5,8 +5,15 @@ import Link from 'next/link';
 import Thumbnail from '@/components/products/Thumbnail';
 import { ArrowRightIcon } from '@/components/icons';
 
+interface TopProductItem {
+  title: string;
+  quantity: number;
+  thumbnail?: string | null;
+  thumbnailUrl?: string | null;
+}
+
 interface TopProductsProps {
-  products?: { title: string; quantity: number }[];
+  products?: TopProductItem[];
   currencyCode?: string;
 }
 
@@ -115,6 +122,8 @@ export default function TopProducts({ products = [], currencyCode = 'TND' }: Top
             <div>
               {products.map((product, idx) => {
                 const fillPct = ((product.quantity / maxQty) * 100).toFixed(2);
+                const thumbSrc = product.thumbnail || product.thumbnailUrl;
+
                 return (
                   <div
                     key={`${product.title}-${idx}`}
@@ -132,11 +141,11 @@ export default function TopProducts({ products = [], currencyCode = 'TND' }: Top
                     }}
                   >
                     {/* Product Cell */}
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                       <span
                         style={{
-                          width: '36px',
-                          height: '36px',
+                          width: '38px',
+                          height: '38px',
                           borderRadius: '8px',
                           background: '#F3F4F6',
                           overflow: 'hidden',
@@ -144,9 +153,22 @@ export default function TopProducts({ products = [], currencyCode = 'TND' }: Top
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          border: '1px solid #E5E7EB',
                         }}
                       >
-                        <Thumbnail type="shirt" />
+                        {thumbSrc ? (
+                          <img
+                            src={thumbSrc}
+                            alt={product.title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                        ) : (
+                          <Thumbnail type="shirt" />
+                        )}
                       </span>
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {product.title}

@@ -8,7 +8,7 @@ import PendingFulfillment from '@/components/dashboard/PendingFulfillment';
 import TopProducts from '@/components/dashboard/TopProducts';
 import AddProductModal from '@/components/products/AddProductModal';
 import { KPI_TILES_DATA, getDailyRevenueData, DailyRevenue, KpiData } from '@/lib/dashboard-data';
-import { getMerchantAnalytics, MerchantAnalytics } from '@/lib/medusa';
+import { getMerchantAnalytics, getMerchantProducts, MerchantAnalytics } from '@/lib/medusa';
 import { CalendarIcon, ChevronDownIcon, PlusIcon } from '@/components/icons';
 
 export default function DashboardPage() {
@@ -19,7 +19,36 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const data = await getMerchantAnalytics();
+        const [data, productsRes] = await Promise.all([
+          getMerchantAnalytics(),
+          getMerchantProducts({ limit: 100 }).catch(() => null),
+        ]);
+
+        if (data && productsRes?.products) {
+          const productMap = new Map<string, string>();
+          for (const prod of productsRes.products) {
+            const thumb = prod.thumbnail || prod.images?.[0]?.url;
+            if (thumb) {
+              productMap.set(prod.title.toLowerCase().trim(), thumb);
+            }
+          }
+
+          if (data.top_products) {
+            data.top_products = data.top_products.map((item) => {
+              const matchedThumb =
+                item.thumbnail ||
+                item.thumbnailUrl ||
+                productMap.get(item.title.toLowerCase().trim()) ||
+                null;
+              return {
+                ...item,
+                thumbnail: matchedThumb,
+                thumbnailUrl: matchedThumb,
+              };
+            });
+          }
+        }
+
         setAnalytics(data);
       } catch (err) {
         console.warn('Using default preview analytics (live data not yet created or session pending)');

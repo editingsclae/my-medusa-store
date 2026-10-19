@@ -25,6 +25,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "currency_code",
       "items.title",
       "items.quantity",
+      "items.thumbnail",
     ],
     filters,
     pagination: {
@@ -48,7 +49,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     dailyMap[key] = { date: key, sales: 0, count: 0 }
   }
 
-  const productSalesMap: Record<string, { title: string; quantity: number }> = {}
+  const productSalesMap: Record<string, { title: string; quantity: number; thumbnail?: string | null }> = {}
 
   for (const order of orders) {
     const total = Number(order.total) || 0
@@ -73,10 +74,43 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     for (const item of ((order.items || []) as any[])) {
       if (!item || !item.title) continue
       if (!productSalesMap[item.title]) {
-        productSalesMap[item.title] = { title: item.title, quantity: 0 }
+        productSalesMap[item.title] = {
+          title: item.title,
+          quantity: 0,
+          thumbnail: item.thumbnail || null,
+        }
       }
       productSalesMap[item.title].quantity += Number(item.quantity) || 0
+      if (!productSalesMap[item.title].thumbnail && item.thumbnail) {
+        productSalesMap[item.title].thumbnail = item.thumbnail
+      }
     }
+  }
+
+  // Lookup thumbnails from catalog if missing on order items
+  try {
+    const productFilters: Record<string, any> = {}
+    if (context.salesChannelId) {
+      productFilters["sales_channels"] = { id: context.salesChannelId }
+    }
+    const { data: catalogProducts } = await query.graph({
+      entity: "product",
+      fields: ["title", "thumbnail"],
+      filters: productFilters,
+    })
+    const catalogThumbMap = new Map<string, string>()
+    for (const p of catalogProducts) {
+      if (p.title && p.thumbnail) {
+        catalogThumbMap.set(p.title.toLowerCase().trim(), p.thumbnail)
+      }
+    }
+    for (const p of Object.values(productSalesMap)) {
+      if (!p.thumbnail) {
+        p.thumbnail = catalogThumbMap.get(p.title.toLowerCase().trim()) || null
+      }
+    }
+  } catch (err) {
+    console.warn("Could not match catalog thumbnails for top products:", err)
   }
 
   const topProducts = Object.values(productSalesMap)
