@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Product } from '../../lib/products';
 import Thumbnail from './Thumbnail';
 import StatusPill from './StatusPill';
@@ -11,7 +12,6 @@ interface ProductRowProps {
   checked: boolean;
   onToggle: (id: string) => void;
   onDelete?: (id: string, name: string) => void;
-  onEdit?: (id: string) => void;
 }
 
 export default function ProductRow({
@@ -19,8 +19,8 @@ export default function ProductRow({
   checked,
   onToggle,
   onDelete,
-  onEdit,
 }: ProductRowProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +37,10 @@ export default function ProductRow({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [menuOpen]);
+
+  const handleEdit = () => {
+    router.push(`/products/${product.id}/edit`);
+  };
 
   return (
     <div
@@ -135,8 +139,8 @@ export default function ProductRow({
         <button
           type="button"
           aria-label={`Edit ${product.name}`}
-          title="Edit / Modify Product"
-          onClick={() => onEdit?.(product.id)}
+          title="Edit Product"
+          onClick={handleEdit}
           style={{
             width: '32px',
             height: '32px',
@@ -228,7 +232,7 @@ export default function ProductRow({
               type="button"
               onClick={() => {
                 setMenuOpen(false);
-                onEdit?.(product.id);
+                handleEdit();
               }}
               style={{
                 display: 'flex',
@@ -247,7 +251,7 @@ export default function ProductRow({
               }}
             >
               <EditIcon style={{ width: '14px', height: '14px' }} />
-              Modify Product
+              Edit Product
             </button>
             <button
               type="button"

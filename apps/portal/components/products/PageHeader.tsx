@@ -1,11 +1,8 @@
 import React from 'react';
-import { DownloadIcon, PlusIcon } from '../icons';
+import Link from 'next/link';
+import { PlusIcon } from '../icons';
 
-interface PageHeaderProps {
-  onAddProduct?: () => void;
-}
-
-export default function PageHeader({ onAddProduct }: PageHeaderProps) {
+export default function PageHeader() {
   return (
     <div
       style={{
@@ -21,9 +18,8 @@ export default function PageHeader({ onAddProduct }: PageHeaderProps) {
         Products
       </h1>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '17px' }}>
-        <button
-          type="button"
-          onClick={onAddProduct}
+        <Link
+          href="/products/new"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -37,12 +33,12 @@ export default function PageHeader({ onAddProduct }: PageHeaderProps) {
             fontSize: '16px',
             fontWeight: 500,
             color: '#FFFFFF',
-            cursor: 'pointer',
+            textDecoration: 'none',
           }}
         >
           <PlusIcon />
           Add Product
-        </button>
+        </Link>
       </div>
     </div>
   );

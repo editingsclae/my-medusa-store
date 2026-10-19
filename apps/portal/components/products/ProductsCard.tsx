@@ -1,17 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { PRODUCTS_DATA, Product } from '../../lib/products';
 import { getMerchantProducts, deleteMerchantProduct, MerchantProduct } from '../../lib/medusa';
 import ProductRow from './ProductRow';
 import Pagination from './Pagination';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-import EditProductModal from './EditProductModal';
 import { SearchIcon, SortIcon, UpDownSortIcon, TrashIcon } from '../icons';
 
 interface ProductsCardProps {
   refreshKey?: number;
-  onOpenAddModal?: () => void;
 }
 
 type DeleteTarget =
@@ -19,7 +18,7 @@ type DeleteTarget =
   | { type: 'bulk'; ids: string[] }
   | null;
 
-export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: ProductsCardProps) {
+export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [liveProducts, setLiveProducts] = useState<MerchantProduct[] | null>(null);
@@ -34,8 +33,7 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Edit modal state
-  const [editingProduct, setEditingProduct] = useState<MerchantProduct | null>(null);
+
 
   const fetchProducts = async () => {
     try {
@@ -143,39 +141,6 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
     }
   };
 
-  // Open edit modal for product
-  const handleEditClick = (id: string) => {
-    if (liveProducts !== null) {
-      const found = liveProducts.find((p) => p.id === id);
-      if (found) {
-        setEditingProduct(found);
-        return;
-      }
-    }
-
-    // Mock fallback if live product not found
-    const mock = displayProducts.find((p) => p.id === id);
-    if (mock) {
-      const rawPrice = parseFloat(mock.price.replace(/[^0-9.]/g, '')) || 0;
-      setEditingProduct({
-        id: mock.id,
-        title: mock.name,
-        subtitle: mock.category,
-        description: '',
-        thumbnail: mock.thumbnailUrl,
-        status: mock.status === 'Active' ? 'published' : 'draft',
-        variants: [
-          {
-            id: `variant_${mock.id}`,
-            title: 'Default Variant',
-            prices: [{ currency_code: 'USD', amount: rawPrice }],
-            inventory_quantity: parseInt(mock.stock, 10) || 0,
-          },
-        ],
-        created_at: new Date().toISOString(),
-      });
-    }
-  };
 
   return (
     <section
@@ -423,7 +388,6 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
                   checked={selectedIds.includes(product.id)}
                   onToggle={handleToggle}
                   onDelete={handleDeleteClick}
-                  onEdit={handleEditClick}
                 />
               ))
             ) : (
@@ -431,25 +395,23 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>
                   No products in your catalog yet.
                 </p>
-                {onOpenAddModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenAddModal}
-                    style={{
-                      marginTop: '16px',
-                      padding: '8px 20px',
-                      borderRadius: '20px',
-                      border: 0,
-                      background: 'var(--accent)',
-                      color: '#FFFFFF',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    + Add Your First Product
-                  </button>
-                )}
+                <Link
+                  href="/products/new"
+                  style={{
+                    display: 'inline-block',
+                    marginTop: '16px',
+                    padding: '8px 20px',
+                    borderRadius: '20px',
+                    border: 0,
+                    background: 'var(--accent)',
+                    color: '#FFFFFF',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                  }}
+                >
+                  + Add Your First Product
+                </Link>
               </div>
             )}
           </div>
@@ -476,15 +438,7 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
         onClose={() => setDeleteTarget(null)}
       />
 
-      {/* Edit Product Modal */}
-      <EditProductModal
-        isOpen={editingProduct !== null}
-        product={editingProduct}
-        onClose={() => setEditingProduct(null)}
-        onSuccess={() => {
-          fetchProducts();
-        }}
-      />
+
     </section>
   );
 }
