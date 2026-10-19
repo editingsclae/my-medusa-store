@@ -22,16 +22,32 @@ export default function RevenueChart({ data }: RevenueChartProps) {
   const plotWidth = plotRight - plotLeft; // 644
   const plotHeight = plotBottom - plotTop; // 200
 
-  const maxVal = useMemo(() => Math.max(...data.map((d) => d.revenue)), [data]);
-  const yMax = useMemo(() => Math.ceil(maxVal / 2000) * 2000, [maxVal]);
+  const maxVal = useMemo(() => {
+    if (!data || data.length === 0) return 0;
+    const max = Math.max(...data.map((d) => d.revenue || 0));
+    return Number.isFinite(max) && max > 0 ? max : 0;
+  }, [data]);
+
+  const yMax = useMemo(() => {
+    if (maxVal <= 0) return 2000;
+    return Math.ceil(maxVal / 2000) * 2000;
+  }, [maxVal]);
 
   const points = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    const len = data.length;
     return data.map((d, i) => {
-      const x = plotLeft + i * (plotWidth / (data.length - 1));
-      const y = plotBottom - (d.revenue / yMax) * plotHeight;
-      return { x, y, data: d, index: i };
+      const x = len > 1 ? plotLeft + i * (plotWidth / (len - 1)) : (plotLeft + plotRight) / 2;
+      const rev = Number(d.revenue) || 0;
+      const y = plotBottom - (rev / (yMax || 2000)) * plotHeight;
+      return { 
+        x: Number.isFinite(x) ? x : plotLeft, 
+        y: Number.isFinite(y) ? y : plotBottom, 
+        data: d, 
+        index: i 
+      };
     });
-  }, [data, yMax, plotWidth, plotHeight]);
+  }, [data, yMax, plotLeft, plotRight, plotWidth, plotBottom, plotHeight]);
 
   const lineD = useMemo(() => {
     return points.reduce((acc, pt, i) => {
@@ -49,7 +65,8 @@ export default function RevenueChart({ data }: RevenueChartProps) {
   // Y-axis grid step steps: 0, 2000, 4000, ... yMax
   const ySteps = useMemo(() => {
     const steps: number[] = [];
-    for (let s = 0; s <= yMax; s += 2000) {
+    const stepSize = yMax > 0 ? Math.max(1, yMax / 4) : 2000;
+    for (let s = 0; s <= yMax; s += stepSize) {
       steps.push(s);
     }
     return steps;
@@ -57,7 +74,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
 
   // Selected or hovered point
   const activePt = hoverIndex !== null && hoverIndex >= 0 && hoverIndex < points.length ? points[hoverIndex] : null;
-  const lastPt = points[points.length - 1];
+  const lastPt = points.length > 0 ? points[points.length - 1] : null;
 
   // Handle pointer hover across the chart
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -259,34 +276,40 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             );
           })}
 
-          {/* X Labels at days 0, 7, 14, 21, 29 */}
-          {[0, 7, 14, 21, 29].map((idx) => {
-            const pt = points[idx];
-            if (!pt) return null;
-            const leftPct = (pt.x / chartWidth) * 100;
-            let transform = 'translateX(-50%)';
-            if (idx === 0) transform = 'none';
-            if (idx === 29) transform = 'translateX(-100%)';
+          {/* X Labels */}
+          {points.length > 0 &&
+            (points.length === 30
+              ? [0, 7, 14, 21, 29]
+              : [0, Math.floor(points.length / 4), Math.floor(points.length / 2), Math.floor((points.length * 3) / 4), points.length - 1]
+            )
+              .filter((idx, i, arr) => arr.indexOf(idx) === i)
+              .map((idx) => {
+                const pt = points[idx];
+                if (!pt || !Number.isFinite(pt.x)) return null;
+                const leftPct = (pt.x / chartWidth) * 100;
+                let transform = 'translateX(-50%)';
+                if (idx === 0) transform = 'none';
+                if (idx === points.length - 1) transform = 'translateX(-100%)';
 
-            return (
-              <span
-                key={idx}
-                style={{
-                  position: 'absolute',
-                  top: '88.8%',
-                  left: `${leftPct}%`,
-                  transform,
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: '#6B7280',
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {pt.data.dateShort}
-              </span>
-            );
-          })}
+                return (
+                  <span
+                    key={idx}
+                    style={{
+                      position: 'absolute',
+                      top: '88.8%',
+                      left: `${leftPct}%`,
+                      transform,
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: '#6B7280',
+                      pointerEvents: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {pt.data.dateShort}
+                  </span>
+                );
+              })}
 
           {/* SVG Canvas */}
           <svg
@@ -299,20 +322,22 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             }}
           >
             {/* Area */}
-            <path d={areaD} fill="var(--accent)" fillOpacity="0.1" />
+            {areaD && <path d={areaD} fill="var(--accent)" fillOpacity="0.1" />}
 
             {/* Line */}
-            <path
-              d={lineD}
-              fill="none"
-              stroke="var(--accent)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {lineD && (
+              <path
+                d={lineD}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
 
             {/* End Point Dot */}
-            {lastPt && (
+            {lastPt && Number.isFinite(lastPt.x) && Number.isFinite(lastPt.y) && (
               <>
                 <circle cx={lastPt.x} cy={lastPt.y} r="6" fill="#FFFFFF" />
                 <circle cx={lastPt.x} cy={lastPt.y} r="4" fill="var(--accent)" />
@@ -320,7 +345,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             )}
 
             {/* Hover Dot */}
-            {activePt && (
+            {activePt && Number.isFinite(activePt.x) && Number.isFinite(activePt.y) && (
               <>
                 <circle cx={activePt.x} cy={activePt.y} r="6" fill="#FFFFFF" />
                 <circle cx={activePt.x} cy={activePt.y} r="4" fill="var(--accent)" />

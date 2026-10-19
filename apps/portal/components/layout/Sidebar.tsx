@@ -4,7 +4,6 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LogoChevronsIcon,
   DashboardIcon,
   ProductsIcon,
   CustomersIcon,
@@ -62,7 +61,6 @@ export default function Sidebar() {
           <circle cx="27.5" cy="27.5" r="3.5" fill="var(--accent)" />
         </svg>
         <span style={{ fontSize: '24px', fontWeight: 600, lineHeight: 1 }}>Delisas</span>
-        <LogoChevronsIcon />
       </div>
 
       {/* Nav */}

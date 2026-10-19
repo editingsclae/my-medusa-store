@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { SearchIcon, BellIcon, ChevronDownIcon, LogoutIcon } from '../icons';
+import { SearchIcon, ChevronDownIcon, LogoutIcon } from '../icons';
 import { getMerchantMe, MerchantProfile, removeStoredToken } from '@/lib/medusa';
 
 export default function TopBar() {
@@ -140,30 +140,6 @@ export default function TopBar() {
             </button>
           </div>
         )}
-
-        <div style={{ width: '1px', height: '32px', background: '#E6E8EC' }} />
-
-        <button
-          type="button"
-          aria-label="Notifications"
-          style={{
-            position: 'relative',
-            width: '48px',
-            height: '48px',
-            boxSizing: 'border-box',
-            padding: 0,
-            border: '1px solid #E6E8EC',
-            borderRadius: '50%',
-            background: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: '#1F2937',
-          }}
-        >
-          <BellIcon />
-        </button>
       </div>
     </header>
   );
