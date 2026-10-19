@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
-import { updateProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-flows"
+import { updateProductsWorkflow, deleteProductsWorkflow, updateProductVariantsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../utils"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -65,7 +65,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   // Verify product exists and belongs to merchant
   const { data: products } = await query.graph({
     entity: "product",
-    fields: ["id", "sales_channels.id"],
+    fields: [
+      "id",
+      "sales_channels.id",
+      "variants.id",
+      "variants.prices.*",
+    ],
     filters: { id: productId },
   })
 
@@ -106,8 +111,35 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
+  // Update variant price if provided
+  if (body.price !== undefined && product.variants?.length) {
+    try {
+      const variantId = product.variants[0].id
+      const currency = (body.currency_code || context.currencyCode || "usd").toLowerCase()
+      await updateProductVariantsWorkflow(req.scope).run({
+        input: {
+          product_variants: [
+            {
+              id: variantId,
+              prices: [
+                {
+                  amount: Number(body.price),
+                  currency_code: currency,
+                },
+              ],
+            },
+          ],
+        },
+      })
+    } catch (variantErr) {
+      console.warn("Failed to update variant price:", variantErr)
+    }
+  }
+
   res.json({ product: result[0] })
 }
+
+export const PATCH = POST
 
 export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)

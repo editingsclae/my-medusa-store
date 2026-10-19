@@ -231,6 +231,26 @@ export async function deleteMerchantProduct(id: string): Promise<{ id: string; o
   })
 }
 
+export async function updateMerchantProduct(
+  id: string,
+  data: {
+    title?: string
+    subtitle?: string
+    description?: string
+    thumbnail?: string | null
+    images?: string[]
+    price?: number
+    currency_code?: string
+    inventory_quantity?: number
+    status?: "draft" | "published"
+  }
+): Promise<{ product: MerchantProduct }> {
+  return apiFetch<{ product: MerchantProduct }>(`/admin/merchant/products/${id}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
 // Media Upload (Cloudflare R2)
 export async function uploadMerchantMedia(file: File): Promise<{ url: string; key: string }> {
   const formData = new FormData()

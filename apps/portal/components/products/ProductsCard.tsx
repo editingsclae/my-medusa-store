@@ -5,12 +5,19 @@ import { PRODUCTS_DATA, Product } from '../../lib/products';
 import { getMerchantProducts, deleteMerchantProduct, MerchantProduct } from '../../lib/medusa';
 import ProductRow from './ProductRow';
 import Pagination from './Pagination';
-import { SearchIcon, SortIcon, ChevronDownIcon, UpDownSortIcon, PlusIcon } from '../icons';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import EditProductModal from './EditProductModal';
+import { SearchIcon, SortIcon, UpDownSortIcon, TrashIcon } from '../icons';
 
 interface ProductsCardProps {
   refreshKey?: number;
   onOpenAddModal?: () => void;
 }
+
+type DeleteTarget =
+  | { type: 'single'; id: string; name: string }
+  | { type: 'bulk'; ids: string[] }
+  | null;
 
 export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: ProductsCardProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,10 +26,25 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
   const [totalCount, setTotalCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  // Deletion modal state
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Edit modal state
+  const [editingProduct, setEditingProduct] = useState<MerchantProduct | null>(null);
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const res = await getMerchantProducts({ q: searchQuery.trim() || undefined });
+      const res = await getMerchantProducts({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        q: searchQuery.trim() || undefined,
+      });
       setLiveProducts(res.products || []);
       setTotalCount(res.count ?? res.products?.length ?? 0);
     } catch (err) {
@@ -35,16 +57,15 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
 
   useEffect(() => {
     fetchProducts();
-  }, [searchQuery, refreshKey]);
+  }, [page, searchQuery, refreshKey]);
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteMerchantProduct(id);
-      fetchProducts();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete product');
+  // Adjust page if totalCount changed (e.g. after deletion)
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  useEffect(() => {
+    if (page > totalPages && totalPages > 0) {
+      setPage(totalPages);
     }
-  };
+  }, [totalPages, page]);
 
   // Convert live products or use fallback mock
   const displayProducts: Product[] = liveProducts !== null
@@ -72,7 +93,8 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
         return product.name.toLowerCase().includes(q) || product.category.toLowerCase().includes(q);
       });
 
-  const allSelected = displayProducts.length > 0 && displayProducts.every((p) => selectedIds.includes(p.id));
+  const allSelected =
+    displayProducts.length > 0 && displayProducts.every((p) => selectedIds.includes(p.id));
 
   const handleSelectAll = () => {
     if (allSelected) {
@@ -86,6 +108,73 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+  };
+
+  // Trigger confirmation modal for single product delete
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteTarget({ type: 'single', id, name });
+  };
+
+  // Trigger confirmation modal for bulk delete
+  const handleBulkDeleteClick = () => {
+    if (selectedIds.length === 0) return;
+    setDeleteTarget({ type: 'bulk', ids: [...selectedIds] });
+  };
+
+  // Confirm delete handler (works for both single and bulk)
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setDeleting(true);
+    try {
+      if (deleteTarget.type === 'single') {
+        await deleteMerchantProduct(deleteTarget.id);
+        setSelectedIds((prev) => prev.filter((id) => id !== deleteTarget.id));
+      } else {
+        await Promise.all(deleteTarget.ids.map((id) => deleteMerchantProduct(id)));
+        setSelectedIds([]);
+      }
+      setDeleteTarget(null);
+      await fetchProducts();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete product(s)');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Open edit modal for product
+  const handleEditClick = (id: string) => {
+    if (liveProducts !== null) {
+      const found = liveProducts.find((p) => p.id === id);
+      if (found) {
+        setEditingProduct(found);
+        return;
+      }
+    }
+
+    // Mock fallback if live product not found
+    const mock = displayProducts.find((p) => p.id === id);
+    if (mock) {
+      const rawPrice = parseFloat(mock.price.replace(/[^0-9.]/g, '')) || 0;
+      setEditingProduct({
+        id: mock.id,
+        title: mock.name,
+        subtitle: mock.category,
+        description: '',
+        thumbnail: mock.thumbnailUrl,
+        status: mock.status === 'Active' ? 'published' : 'draft',
+        variants: [
+          {
+            id: `variant_${mock.id}`,
+            title: 'Default Variant',
+            prices: [{ currency_code: 'USD', amount: rawPrice }],
+            inventory_quantity: parseInt(mock.stock, 10) || 0,
+          },
+        ],
+        created_at: new Date().toISOString(),
+      });
+    }
   };
 
   return (
@@ -134,7 +223,10 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
               type="text"
               placeholder="Search products..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               aria-label="Search products"
               style={{
                 flex: 1,
@@ -143,7 +235,7 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
                 outline: 'none',
                 background: 'transparent',
                 fontFamily: 'inherit',
-                fontSize: '16px',
+                fontSize: '15px',
                 color: '#111827',
               }}
             />
@@ -162,7 +254,7 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
               borderRadius: '22px',
               background: '#FFFFFF',
               fontFamily: 'inherit',
-              fontSize: '16px',
+              fontSize: '15px',
               fontWeight: 500,
               color: '#374151',
               cursor: 'pointer',
@@ -174,6 +266,86 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
         </div>
       </div>
 
+      {/* Bulk Action Toolbar */}
+      {selectedIds.length > 0 && (
+        <div
+          style={{
+            margin: '0 24px 16px 24px',
+            padding: '12px 18px',
+            background: '#F5F3FF',
+            border: '1px solid #DDD6FE',
+            borderRadius: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'var(--accent)',
+                color: '#FFFFFF',
+                fontSize: '12px',
+                fontWeight: 700,
+              }}
+            >
+              {selectedIds.length}
+            </span>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: '#4C1D95' }}>
+              product{selectedIds.length > 1 ? 's' : ''} selected
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #D1D5DB',
+                background: '#FFFFFF',
+                color: '#4B5563',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              Deselect All
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDeleteClick}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: '1px solid #FCA5A5',
+                background: '#EF4444',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
+              }}
+            >
+              <TrashIcon style={{ width: '14px', height: '14px' }} />
+              Delete Selected ({selectedIds.length})
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table Wrapper */}
       <div style={{ overflowX: 'auto' }}>
         <div style={{ minWidth: '978px' }}>
@@ -181,9 +353,9 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '38px minmax(220px, 1fr) 173px 156px 153px 160px 128px',
+              gridTemplateColumns: '38px minmax(220px, 1fr) 173px 156px 153px 160px 148px',
               alignItems: 'center',
-              height: '40px',
+              height: '42px',
               boxSizing: 'border-box',
               padding: '0 24px 0 26px',
               background: '#F7F8FA',
@@ -209,6 +381,11 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
                   borderRadius: '4px',
                   background: allSelected ? 'var(--accent)' : '#FFFFFF',
                   cursor: 'pointer',
+                  backgroundImage: allSelected
+                    ? `url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.2 5.2L6.8 10.6L3.8 7.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`
+                    : 'none',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
                 }}
               />
             </span>
@@ -235,7 +412,7 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
           {/* Body Rows */}
           <div>
             {loading ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: '#8A90A0' }}>
+              <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>
                 Loading catalog products...
               </div>
             ) : displayProducts.length > 0 ? (
@@ -245,7 +422,8 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
                   product={product}
                   checked={selectedIds.includes(product.id)}
                   onToggle={handleToggle}
-                  onDelete={handleDelete}
+                  onDelete={handleDeleteClick}
+                  onEdit={handleEditClick}
                 />
               ))
             ) : (
@@ -278,8 +456,35 @@ export default function ProductsCard({ refreshKey = 0, onOpenAddModal }: Product
         </div>
       </div>
 
-      {/* Footer / Pagination */}
-      <Pagination showingText={`Showing ${displayProducts.length} of ${liveProducts !== null ? totalCount : displayProducts.length} entries`} />
+      {/* Dynamic Pagination */}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalCount={liveProducts !== null ? totalCount : displayProducts.length}
+        pageSize={pageSize}
+        onPageChange={(p) => setPage(p)}
+      />
+
+      {/* Confirmation Modal for Single / Bulk Delete */}
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        title={deleteTarget?.type === 'bulk' ? `Delete ${deleteTarget.ids.length} Products` : 'Delete Product'}
+        itemName={deleteTarget?.type === 'single' ? deleteTarget.name : undefined}
+        itemCount={deleteTarget?.type === 'bulk' ? deleteTarget.ids.length : 1}
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      {/* Edit Product Modal */}
+      <EditProductModal
+        isOpen={editingProduct !== null}
+        product={editingProduct}
+        onClose={() => setEditingProduct(null)}
+        onSuccess={() => {
+          fetchProducts();
+        }}
+      />
     </section>
   );
 }

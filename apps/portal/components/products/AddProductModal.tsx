@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { createMerchantProduct, uploadMerchantMedia } from '@/lib/medusa';
-import { PlusIcon } from '@/components/icons';
+import ImageDropzone from './ImageDropzone';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -26,14 +26,9 @@ export default function AddProductModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   if (!isOpen) return null;
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleFileSelect = async (file: File) => {
     setUploadingImage(true);
     setError(null);
     try {
@@ -341,7 +336,7 @@ export default function AddProductModal({
             />
           </div>
 
-          {/* Image Upload */}
+          {/* Image Upload with Drag & Drop */}
           <div>
             <label
               style={{
@@ -354,84 +349,12 @@ export default function AddProductModal({
             >
               Product Image (Cloudflare R2)
             </label>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageUpload}
-              accept="image/*"
-              style={{ display: 'none' }}
+            <ImageDropzone
+              imageUrl={imageUrl}
+              uploading={uploadingImage}
+              onFileSelect={handleFileSelect}
+              onRemove={() => setImageUrl(null)}
             />
-
-            {imageUrl ? (
-              <div
-                style={{
-                  position: 'relative',
-                  width: '120px',
-                  height: '120px',
-                  borderRadius: '12px',
-                  overflow: 'hidden',
-                  border: '1px solid #E5E7EB',
-                }}
-              >
-                <img
-                  src={imageUrl}
-                  alt="Product preview"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setImageUrl(null)}
-                  style={{
-                    position: 'absolute',
-                    top: '4px',
-                    right: '4px',
-                    background: 'rgba(0,0,0,0.6)',
-                    color: '#FFFFFF',
-                    border: 0,
-                    borderRadius: '50%',
-                    width: '24px',
-                    height: '24px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingImage}
-                style={{
-                  width: '100%',
-                  height: '80px',
-                  border: '2px dashed #D1D5DB',
-                  borderRadius: '12px',
-                  background: '#F9FAFB',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: uploadingImage ? 'not-allowed' : 'pointer',
-                  color: '#6B7280',
-                  gap: '4px',
-                }}
-              >
-                {uploadingImage ? (
-                  <span>Uploading to R2...</span>
-                ) : (
-                  <>
-                    <PlusIcon />
-                    <span style={{ fontSize: '14px', fontWeight: 500 }}>
-                      Click to upload photo
-                    </span>
-                  </>
-                )}
-              </button>
-            )}
           </div>
 
           {/* Status radio */}
