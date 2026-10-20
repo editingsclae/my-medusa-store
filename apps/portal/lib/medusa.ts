@@ -148,6 +148,11 @@ export interface MerchantOrder {
     items?: { id: string; quantity: number; line_item_id?: string }[]
   }[]
   payment_collections?: {
+    id?: string
+    status?: string
+    amount?: number
+    captured_amount?: number
+    refunded_amount?: number
     payments?: {
       id: string
       amount: number
@@ -155,6 +160,8 @@ export interface MerchantOrder {
       provider_id?: string
       captured_at?: string | null
       created_at?: string
+      captures?: { id: string; amount: number; created_at?: string }[]
+      refunds?: { id: string; amount: number; created_at?: string }[]
     }[]
   }[]
 }

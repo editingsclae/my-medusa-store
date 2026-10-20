@@ -48,6 +48,11 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "items.quantity",
       "items.unit_price",
       "fulfillments.*",
+      "payment_collections.status",
+      "payment_collections.amount",
+      "payment_collections.captured_amount",
+      "payment_collections.payments.captures.id",
+      "payment_collections.payments.captures.amount",
     ],
     filters,
     pagination: {
@@ -59,8 +64,24 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
+  // Compute live aggregated payment_status
+  const formattedOrders = (orders || []).map((ord: any) => {
+    const pcs = ord.payment_collections || []
+    const totalCaptured = pcs.reduce((s: number, pc: any) => s + (Number(pc.captured_amount) || 0), 0)
+    const hasCaptures = pcs.some((pc: any) => (pc.payments || []).some((p: any) => (p.captures || []).length > 0))
+    const isCaptured = 
+      pcs.some((pc: any) => pc.status === "captured") || 
+      (totalCaptured > 0 && totalCaptured >= (ord.total || 0)) ||
+      (hasCaptures && totalCaptured > 0)
+    
+    return {
+      ...ord,
+      payment_status: isCaptured ? "captured" : (ord.payment_status || "authorized"),
+    }
+  })
+
   res.json({
-    orders,
+    orders: formattedOrders,
     count: metadata?.count ?? orders.length,
     limit,
     offset,

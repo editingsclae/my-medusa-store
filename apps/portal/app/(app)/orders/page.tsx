@@ -344,7 +344,35 @@ export default function OrdersPage() {
     const o = detailOrder;
     const stage = getFulfillmentStage(o);
     const fulInfo = getFulfillmentBadgeInfo(stage);
-    const payInfo = getPaymentBadgeInfo(o.payment_status);
+
+    const paymentCollections = o.payment_collections || [];
+    const allPayments = paymentCollections.flatMap((pc) => pc.payments || []);
+    const firstPayment = allPayments[0];
+
+    // Compute captured amounts across payment collections and payment captures
+    const pcCapturedTotal = paymentCollections.reduce(
+      (sum, pc) => sum + (Number(pc.captured_amount) || 0),
+      0
+    );
+    const directCapturesTotal = allPayments.reduce((sum, p) => {
+      const caps = p.captures || [];
+      return sum + caps.reduce((cs: number, c: any) => cs + (Number(c.amount) || 0), 0);
+    }, 0);
+
+    const rawPaymentStatus = (o.payment_status || '').toLowerCase();
+    const isPaymentCaptured =
+      rawPaymentStatus === 'captured' ||
+      rawPaymentStatus === 'paid' ||
+      rawPaymentStatus === 'completed' ||
+      paymentCollections.some((pc) => pc.status === 'captured') ||
+      (pcCapturedTotal > 0 && pcCapturedTotal >= (o.total || 0)) ||
+      (directCapturesTotal > 0 && directCapturesTotal >= (o.total || 0)) ||
+      Boolean(firstPayment?.captured_at) ||
+      allPayments.some((p) => (p.captures && p.captures.length > 0));
+
+    const payInfo = isPaymentCaptured
+      ? { label: 'Captured', tone: TONES.green }
+      : getPaymentBadgeInfo(o.payment_status);
 
     const cur = o.currency_code || 'TND';
     const items = o.items || [];
@@ -369,17 +397,17 @@ export default function OrdersPage() {
       : 0;
 
     const orderTotal = o.total;
-    const isPaid = payInfo.label === 'Captured';
-    const paidTotal = isPaid ? orderTotal : 0;
-    const outstanding = isPaid ? 0 : orderTotal;
+    const isPaid = isPaymentCaptured;
+    const paidTotal = isPaid
+      ? (pcCapturedTotal > 0 ? pcCapturedTotal : (directCapturesTotal > 0 ? directCapturesTotal : orderTotal))
+      : 0;
+    const outstanding = Math.max(0, orderTotal - paidTotal);
 
     // Real Payment data from backend
-    const allPayments = o.payment_collections?.flatMap((pc) => pc.payments || []) || [];
-    const firstPayment = allPayments[0];
     const paymentId = firstPayment?.id || `pay_${o.id.slice(-8)}`;
     const paymentProvider = firstPayment?.provider_id || (o.shipping_methods?.[0]?.name ? 'Manual / Store Payment' : 'Standard Provider');
     const paymentDate = firstPayment?.created_at ? new Date(firstPayment.created_at) : new Date(o.created_at);
-    const canCapture = payInfo.label === 'Authorized';
+    const canCapture = !isPaid && (payInfo.label === 'Authorized' || rawPaymentStatus === 'authorized' || rawPaymentStatus === 'awaiting');
 
     // Real Fulfillment data from backend
     const firstFulfillment = o.fulfillments?.[0];
@@ -1067,7 +1095,7 @@ export default function OrdersPage() {
             </section>
 
             {/* Payments Section */}
-            <section style={{ background: '#FFFFFF', borderRadius: '24px', minWidth: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <section style={{ background: '#FFFFFF', borderRadius: '24px', minWidth: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '24px 24px 16px' }}>
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600, lineHeight: '28px', color: '#111827' }}>
                   Payments
@@ -1093,28 +1121,119 @@ export default function OrdersPage() {
                 </span>
               </div>
 
-              <dl style={{ margin: 0, padding: '0 24px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px 24px' }}>
-                <div>
-                  <dt style={{ fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>Payment ID</dt>
-                  <dd style={{ margin: '2px 0 0', fontSize: '16px', fontWeight: 600, lineHeight: '24px', color: '#111827' }}>
-                    {paymentId}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>Provider</dt>
-                  <dd style={{ margin: '2px 0 0', fontSize: '16px', fontWeight: 600, lineHeight: '24px', color: '#111827' }}>
-                    {paymentProvider}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>Amount</dt>
-                  <dd style={{ margin: '2px 0 0', fontSize: '16px', fontWeight: 600, lineHeight: '24px', fontVariantNumeric: 'tabular-nums', color: '#111827' }}>
-                    {formatMoney(orderTotal, cur)}
-                  </dd>
-                </div>
-              </dl>
+              {/* Payment Row(s) */}
+              <div style={{ padding: '0 24px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {allPayments.length > 0 ? (
+                  allPayments.map((p, idx) => {
+                    const pCaps = p.captures || [];
+                    const pCapTotal = pCaps.reduce((cs: number, c: any) => cs + (Number(c.amount) || 0), 0);
+                    const pCaptured = pCaps.length > 0 || Boolean(p.captured_at) || isPaid;
+                    const pTone = pCaptured ? TONES.green : TONES.amber;
+                    const pShortId = p.id?.startsWith('pay_') ? `#${p.id.slice(-7).toUpperCase()}` : `#${p.id?.slice(-7)}`;
+                    const pDate = p.created_at ? new Date(p.created_at) : new Date(o.created_at);
+                    const pDateStr = `${pDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${pDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`;
 
-              {canCapture ? (
+                    return (
+                      <div
+                        key={p.id || idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          padding: '12px 14px',
+                          borderRadius: '12px',
+                          background: '#F9FAFB',
+                          border: '1px solid #F3F4F6',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>
+                              {pShortId}
+                            </span>
+                            <span style={{ fontSize: '13px', color: '#6B7280' }}>
+                              {pDateStr}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#4B5263' }}>
+                            {p.provider_id || paymentProvider}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 'none' }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              height: '24px',
+                              padding: '0 10px',
+                              border: `1px solid ${pTone.bd}`,
+                              borderRadius: '12px',
+                              background: pTone.bg,
+                              color: pTone.fg,
+                              fontSize: '13px',
+                              fontWeight: 500,
+                            }}
+                          >
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: pTone.dot }} />
+                            {pCaptured ? 'Captured' : 'Authorized'}
+                          </span>
+                          <span style={{ fontSize: '15px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>
+                            {formatMoney(p.amount || orderTotal, p.currency_code || cur)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      background: '#F9FAFB',
+                      border: '1px solid #F3F4F6',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                      <span style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>
+                        {paymentId?.startsWith('pay_') ? `#${paymentId.slice(-7).toUpperCase()}` : paymentId}
+                      </span>
+                      <span style={{ fontSize: '13px', color: '#4B5263' }}>{paymentProvider}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 'none' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          height: '24px',
+                          padding: '0 10px',
+                          border: `1px solid ${payInfo.tone.bd}`,
+                          borderRadius: '12px',
+                          background: payInfo.tone.bg,
+                          color: payInfo.tone.fg,
+                          fontSize: '13px',
+                          fontWeight: 500,
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: payInfo.tone.dot }} />
+                        {payInfo.label}
+                      </span>
+                      <span style={{ fontSize: '15px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>
+                        {formatMoney(orderTotal, cur)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {canCapture && (
                 <div
                   style={{
                     display: 'flex',
@@ -1122,7 +1241,7 @@ export default function OrdersPage() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: '12px 16px',
-                    margin: '0 24px 24px',
+                    margin: '0 24px 20px',
                     padding: '16px 20px',
                     border: '1px solid #F7D9A3',
                     borderRadius: '16px',
@@ -1157,28 +1276,26 @@ export default function OrdersPage() {
                     {actionLoading ? 'Capturing...' : 'Capture payment'}
                   </button>
                 </div>
-              ) : (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    margin: '0 24px 24px',
-                    padding: '14px 20px',
-                    border: '1px solid #9BDDB4',
-                    borderRadius: '16px',
-                    background: '#F2FBF6',
-                    color: '#17803F',
-                    fontSize: '15px',
-                    fontWeight: 500,
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}>
-                    <circle cx="12" cy="12" r="10" /><path d="m8 12 3 3 5-6" />
-                  </svg>
-                  {formatMoney(orderTotal, cur)} captured.
-                </div>
               )}
+
+              {/* Total paid by customer */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '16px 24px',
+                  borderTop: '1px solid #F3F4F6',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  color: '#4B5263',
+                }}
+              >
+                <span>Total paid by customer</span>
+                <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>
+                  {formatMoney(paidTotal, cur)}
+                </span>
+              </div>
             </section>
 
             {/* Fulfillment Section */}
