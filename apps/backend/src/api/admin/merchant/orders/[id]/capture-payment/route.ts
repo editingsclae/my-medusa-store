@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { capturePaymentWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../../utils"
+import { findForeignIds } from "../../../ownership"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -34,6 +35,19 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const payments = (order.payment_collections || []).flatMap((pc: any) => pc.payments || [])
+
+  // A payment id in the body must belong to this order, otherwise a merchant
+  // could capture a payment that was made on another merchant's order.
+  if (
+    body.payment_id &&
+    findForeignIds([body.payment_id], payments.map((p: any) => p.id)).length > 0
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Payment does not belong to this order"
+    )
+  }
+
   const paymentId = body.payment_id || payments[0]?.id
 
   if (!paymentId) {

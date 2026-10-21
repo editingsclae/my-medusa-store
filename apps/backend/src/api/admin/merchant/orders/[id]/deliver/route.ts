@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { markOrderFulfillmentAsDeliveredWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../../utils"
+import { findForeignIds } from "../../../ownership"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -30,6 +31,21 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
       "You do not have permission to update this order"
+    )
+  }
+
+  // The fulfillment in the body must belong to this order, otherwise a merchant
+  // could mark another merchant's fulfillment as delivered.
+  if (
+    body.fulfillment_id &&
+    findForeignIds(
+      [body.fulfillment_id],
+      (order.fulfillments || []).map((f: any) => f.id)
+    ).length > 0
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Fulfillment does not belong to this order"
     )
   }
 

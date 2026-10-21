@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { createOrderFulfillmentWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../../utils"
+import { findForeignIds } from "../../../ownership"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -67,7 +68,47 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
-  const locationId: string | undefined = body.location_id || context.stockLocationId
+  // Every item must be a line item of this order
+  if (
+    findForeignIds(items.map((i) => i.id), orderItems.map((i: any) => i.id)).length > 0
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Items do not belong to this order"
+    )
+  }
+
+  // A shipping option in the body must be one the order was placed with
+  if (
+    body.shipping_option_id &&
+    findForeignIds(
+      [body.shipping_option_id],
+      (order.shipping_methods || [])
+        .map((sm: any) => sm?.shipping_option_id)
+        .filter(Boolean)
+    ).length > 0
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Shipping option does not belong to this order"
+    )
+  }
+
+  // A merchant can only fulfill from its own stock location. Without this a
+  // merchant could name another merchant's warehouse in the body.
+  const requestedLocationId: string | undefined = body.location_id
+  if (
+    requestedLocationId &&
+    !context.isSuperAdmin &&
+    requestedLocationId !== context.stockLocationId
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "You can only fulfill from your own stock location"
+    )
+  }
+
+  const locationId: string | undefined = requestedLocationId || context.stockLocationId
   if (!locationId) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,

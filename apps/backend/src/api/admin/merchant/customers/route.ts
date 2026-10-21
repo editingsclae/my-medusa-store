@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { getMerchantContext } from "../utils"
+import { uniqueAddresses, type AddressLike } from "../ownership"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -12,21 +13,31 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
   let customerIds: string[] | null = null
 
+  // Addresses used on this merchant's own orders, by customer id. A merchant
+  // never gets customer.addresses, which can hold addresses saved while
+  // buying from another merchant.
+  const orderAddressesByCustomer = new Map<string, AddressLike[]>()
+
   // If scoped to a merchant's sales channel, find all customers who have ordered from this sales channel
   if (context.salesChannelId && !context.isSuperAdmin) {
     const { data: channelOrders } = await query.graph({
       entity: "order",
-      fields: ["customer_id"],
+      fields: ["customer_id", "shipping_address.*"],
       filters: {
         sales_channel_id: context.salesChannelId,
       },
     })
 
-    const uniqueIds = Array.from(
-      new Set(channelOrders.map((o: any) => o.customer_id).filter(Boolean))
-    ) as string[]
+    for (const o of channelOrders as any[]) {
+      if (!o.customer_id) {
+        continue
+      }
+      const list = orderAddressesByCustomer.get(o.customer_id) || []
+      list.push(o.shipping_address)
+      orderAddressesByCustomer.set(o.customer_id, list)
+    }
 
-    customerIds = uniqueIds
+    customerIds = Array.from(orderAddressesByCustomer.keys())
   }
 
   // Build filters
@@ -63,7 +74,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "has_account",
       "created_at",
       "updated_at",
-      "addresses.*",
+      ...(context.isSuperAdmin ? ["addresses.*"] : []),
     ],
     filters,
     pagination: {
@@ -86,7 +97,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     has_account: Boolean(c.has_account),
     account_status: c.has_account ? "Registered" : "Guest",
     created_at: c.created_at,
-    addresses: c.addresses || [],
+    addresses: context.isSuperAdmin
+      ? c.addresses || []
+      : uniqueAddresses(orderAddressesByCustomer.get(c.id) || []),
   }))
 
   res.json({
