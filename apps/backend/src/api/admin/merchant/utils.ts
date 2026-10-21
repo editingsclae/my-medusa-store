@@ -1,5 +1,6 @@
 import { MedusaRequest } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
+import { isScopedMerchant } from "../../merchant-guard"
 
 export interface MerchantContext {
   user: {
@@ -42,8 +43,10 @@ export async function getMerchantContext(req: MedusaRequest): Promise<MerchantCo
     )
   }
 
-  // Determine if this is a platform super-admin or a scoped merchant
-  const isSuperAdmin = !user.metadata?.sales_channel_id || user.metadata?.role === "admin"
+  // Determine if this is a platform super-admin or a scoped merchant. This uses
+  // the same rule as the /admin/* guard, so a user with role "merchant" is never
+  // a super-admin, even if its sales channel is missing.
+  const isSuperAdmin = !isScopedMerchant(user.metadata)
 
   // If super-admin, allow passing a ?sales_channel_id query param to impersonate / view a specific merchant
   const requestedChannelId = req.query?.sales_channel_id as string | undefined
@@ -74,8 +77,10 @@ export async function getMerchantContext(req: MedusaRequest): Promise<MerchantCo
     }
   }
 
-  // Fallback to any available stock location if not linked yet
-  if (!resolvedStockLocationId) {
+  // Platform admins without a linked location fall back to the first available
+  // one. A merchant never does, because that location can belong to another
+  // merchant.
+  if (!resolvedStockLocationId && isSuperAdmin) {
     const { data: locations } = await query.graph({
       entity: "stock_location",
       fields: ["id"],

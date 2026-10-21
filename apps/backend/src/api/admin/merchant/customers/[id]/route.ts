@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { getMerchantContext } from "../../utils"
+import { uniqueAddresses } from "../../ownership"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -18,7 +19,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "has_account",
       "created_at",
       "updated_at",
-      "addresses.*",
+      // Saved addresses are only read for platform admins. A merchant gets the
+      // addresses from its own orders instead (see below).
+      ...(context.isSuperAdmin ? ["addresses.*"] : []),
     ],
     filters: { id: customerId },
   })
@@ -59,6 +62,18 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       order: { created_at: "DESC" },
     },
   })
+
+  // Customers are global in Medusa. A merchant may only see a customer who has
+  // ordered from its own sales channel, and only the addresses used on those
+  // orders, not addresses saved while buying from another merchant.
+  if (!context.isSuperAdmin) {
+    if (!orders || orders.length === 0) {
+      throw new MedusaError(MedusaError.Types.NOT_FOUND, "Customer not found")
+    }
+    customer.addresses = uniqueAddresses(
+      orders.map((o: any) => o.shipping_address)
+    ) as any
+  }
 
   res.json({
     customer: {

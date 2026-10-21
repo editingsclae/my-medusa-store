@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { createOrderShipmentWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../../utils"
+import { findForeignIds } from "../../../ownership"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -38,6 +39,21 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
+  // The fulfillment in the body must belong to this order, otherwise a merchant
+  // could ship another merchant's fulfillment through its own order.
+  if (
+    body.fulfillment_id &&
+    findForeignIds(
+      [body.fulfillment_id],
+      (order.fulfillments || []).map((f: any) => f.id)
+    ).length > 0
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Fulfillment does not belong to this order"
+    )
+  }
+
   const fulfillmentId = body.fulfillment_id || order.fulfillments?.[0]?.id
   if (!fulfillmentId) {
     throw new MedusaError(
@@ -51,6 +67,21 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     id: fi.line_item_id || fi.id,
     quantity: fi.quantity,
   }))
+
+  // Items in the body must be line items of this order
+  if (
+    body.items &&
+    (!Array.isArray(body.items) ||
+      findForeignIds(
+        body.items.map((i: any) => i?.id),
+        (order.items || []).map((i: any) => i?.id)
+      ).length > 0)
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Items do not belong to this order"
+    )
+  }
 
   const labels = body.tracking_number
     ? [
