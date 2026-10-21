@@ -8,7 +8,9 @@ import {
   updateMerchantProduct,
   deleteMerchantProduct,
   uploadMerchantMedia,
+  getMerchantCategories,
   MerchantProduct,
+  MerchantCategory,
 } from '@/lib/medusa';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { ArrowLeftIcon, TrashIcon, CheckIcon, UploadCloudIcon, PlusIcon } from '@/components/icons';
@@ -26,20 +28,6 @@ interface ProductFormProps {
   onCancel?: () => void;
 }
 
-const CATEGORIES = [
-  'Shirt',
-  'Shoe',
-  'Polo',
-  'Top',
-  'Knitwear',
-  'Bag',
-  'Waistcoat',
-  'Co-Ord Set',
-  'Accessories',
-  'Electronics',
-  'Automotive',
-];
-
 export default function ProductForm({
   mode,
   productId,
@@ -52,7 +40,11 @@ export default function ProductForm({
   // Form states
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
+  // The merchant's own categories, and the id of the one picked for this product
+  const [categories, setCategories] = useState<MerchantCategory[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
+  const [categoryId, setCategoryId] = useState('');
+  const initialCategoryId = initialProduct?.categories?.[0]?.id || '';
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('10');
   const [status, setStatus] = useState<'Active' | 'Draft'>('Active');
@@ -74,12 +66,30 @@ export default function ProductForm({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load this merchant's categories for the picker
+  useEffect(() => {
+    let cancelled = false;
+    getMerchantCategories()
+      .then((res) => {
+        if (!cancelled) setCategories(res.categories || []);
+      })
+      .catch(() => {
+        // The picker just stays empty if the list cannot be loaded
+      })
+      .finally(() => {
+        if (!cancelled) setCategoriesLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Initialize data if in edit mode
   useEffect(() => {
     if (initialProduct) {
       setName(initialProduct.title || '');
       setDescription(initialProduct.description || '');
-      setCategory(initialProduct.subtitle || '');
+      setCategoryId(initialProduct.categories?.[0]?.id || '');
 
       const variant = initialProduct.variants?.[0];
       const p = variant?.prices?.[0];
@@ -197,7 +207,7 @@ export default function ProductForm({
       if (mode === 'create') {
         await createMerchantProduct({
           title: name.trim(),
-          subtitle: category.trim() || undefined,
+          category_ids: categoryId ? [categoryId] : undefined,
           description: description.trim() || undefined,
           price: numPrice,
           inventory_quantity: parseInt(stock, 10) || 0,
@@ -209,7 +219,12 @@ export default function ProductForm({
       } else if (mode === 'edit' && productId) {
         await updateMerchantProduct(productId, {
           title: name.trim(),
-          subtitle: category.trim() || undefined,
+          // Only sent when the pick changed, so a product with several
+          // categories (set through the API) keeps them if nothing was touched.
+          // An empty array clears the category.
+          ...(categoryId !== initialCategoryId
+            ? { category_ids: categoryId ? [categoryId] : [] }
+            : {}),
           description: description.trim() || undefined,
           price: numPrice,
           inventory_quantity: parseInt(stock, 10) || 0,
@@ -1118,8 +1133,8 @@ export default function ProductForm({
                   >
                     <select
                       id="p-category"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
+                      value={categoryId}
+                      onChange={(e) => setCategoryId(e.target.value)}
                       style={{
                         appearance: 'none',
                         WebkitAppearance: 'none',
@@ -1134,16 +1149,14 @@ export default function ProductForm({
                         background: 'transparent',
                         fontFamily: 'inherit',
                         fontSize: '16px',
-                        color: category ? '#111827' : '#8A90A0',
+                        color: categoryId ? '#111827' : '#8A90A0',
                         cursor: 'pointer',
                       }}
                     >
-                      <option value="" disabled>
-                        Select category
-                      </option>
-                      {CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
+                      <option value="">No category</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
                         </option>
                       ))}
                     </select>
@@ -1162,6 +1175,14 @@ export default function ProductForm({
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </div>
+                  {categoriesLoaded && categories.length === 0 && (
+                    <p style={{ margin: '8px 0 0', fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>
+                      You have no categories yet.{' '}
+                      <Link href="/categories" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                        Create one
+                      </Link>
+                    </p>
+                  )}
                 </div>
               </section>
 

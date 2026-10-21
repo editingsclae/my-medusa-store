@@ -9,6 +9,11 @@ import {
   createInventoryItemsWorkflow,
 } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../utils"
+import {
+  assertCategoriesOwned,
+  onlyOwnedCategories,
+  requireSalesChannelId,
+} from "../../category-access"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -30,6 +35,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "updated_at",
       "sales_channels.id",
       "sales_channels.name",
+      "categories.id",
+      "categories.name",
       "variants.id",
       "variants.title",
       "variants.sku",
@@ -78,9 +85,15 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     }
   })
 
+  const [visibleProduct] = await onlyOwnedCategories(
+    req.scope,
+    context.salesChannelId,
+    [product as any]
+  )
+
   res.json({
     product: {
-      ...product,
+      ...visibleProduct,
       variants: enhancedVariants,
     },
   })
@@ -124,6 +137,17 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const updateData: any = {}
+
+  // category_ids replaces the product's categories, so every id must be one of
+  // this merchant's own. Sending an empty array clears them.
+  if (body.category_ids !== undefined) {
+    updateData.category_ids = await assertCategoriesOwned(
+      req.scope,
+      requireSalesChannelId(context),
+      body.category_ids
+    )
+  }
+
   if (body.title !== undefined) updateData.title = body.title
   if (body.subtitle !== undefined) updateData.subtitle = body.subtitle
   if (body.description !== undefined) updateData.description = body.description

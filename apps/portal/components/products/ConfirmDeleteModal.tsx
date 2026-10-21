@@ -9,6 +9,9 @@ interface ConfirmDeleteModalProps {
   itemName?: string;
   itemCount?: number;
   loading?: boolean;
+  // Optional wording for deleting something other than a product
+  message?: React.ReactNode;
+  confirmLabel?: string;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -19,6 +22,8 @@ export default function ConfirmDeleteModal({
   itemName,
   itemCount = 1,
   loading = false,
+  message,
+  confirmLabel,
   onConfirm,
   onClose,
 }: ConfirmDeleteModalProps) {
@@ -99,7 +104,9 @@ export default function ConfirmDeleteModal({
             lineHeight: '22px',
           }}
         >
-          {isBulk ? (
+          {message ? (
+            message
+          ) : isBulk ? (
             <>
               Are you sure you want to permanently delete these <strong>{itemCount}</strong> products? This action cannot be undone.
             </>
@@ -154,7 +161,7 @@ export default function ConfirmDeleteModal({
               gap: '6px',
             }}
           >
-            {loading ? 'Deleting...' : isBulk ? `Delete (${itemCount})` : 'Delete Product'}
+            {loading ? 'Deleting...' : confirmLabel ? confirmLabel : isBulk ? `Delete (${itemCount})` : 'Delete Product'}
           </button>
         </div>
       </div>
