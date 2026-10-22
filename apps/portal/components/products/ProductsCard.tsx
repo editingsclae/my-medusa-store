@@ -78,7 +78,7 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
         return {
           id: p.id,
           name: p.title,
-          category: p.subtitle || 'Product',
+          category: p.categories?.[0]?.name || p.subtitle || 'Uncategorized',
           stock: stockQty,
           price: formattedPrice,
           status: p.status === 'published' ? 'Active' : 'Draft',

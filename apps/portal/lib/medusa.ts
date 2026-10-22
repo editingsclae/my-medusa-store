@@ -62,7 +62,20 @@ export interface MerchantProduct {
   status: "draft" | "proposed" | "published" | "rejected"
   variants?: ProductVariant[]
   images?: { id: string; url: string }[]
+  categories?: { id: string; name: string }[]
   created_at: string
+}
+
+export interface MerchantCategory {
+  id: string
+  name: string
+  handle: string
+  description?: string | null
+  is_active?: boolean
+  rank?: number | null
+  product_count?: number
+  created_at?: string
+  updated_at?: string
 }
 
 export interface MerchantOrderLineItem {
@@ -284,6 +297,7 @@ export async function createMerchantProduct(data: {
   currency_code?: string
   inventory_quantity?: number
   status?: "draft" | "published"
+  category_ids?: string[]
 }): Promise<{ product: MerchantProduct }> {
   return apiFetch<{ product: MerchantProduct }>("/admin/merchant/products", {
     method: "POST",
@@ -309,11 +323,44 @@ export async function updateMerchantProduct(
     currency_code?: string
     inventory_quantity?: number
     status?: "draft" | "published"
+    // Replaces the product's categories. An empty array clears them.
+    category_ids?: string[]
   }
 ): Promise<{ product: MerchantProduct }> {
   return apiFetch<{ product: MerchantProduct }>(`/admin/merchant/products/${id}`, {
     method: "POST",
     body: JSON.stringify(data),
+  })
+}
+
+// Categories (each merchant has its own list)
+export async function getMerchantCategories(): Promise<{ categories: MerchantCategory[]; count: number }> {
+  return apiFetch<{ categories: MerchantCategory[]; count: number }>("/admin/merchant/categories")
+}
+
+export async function createMerchantCategory(data: {
+  name: string
+  description?: string
+}): Promise<{ category: MerchantCategory }> {
+  return apiFetch<{ category: MerchantCategory }>("/admin/merchant/categories", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateMerchantCategory(
+  id: string,
+  data: { name?: string; description?: string; is_active?: boolean }
+): Promise<{ category: MerchantCategory }> {
+  return apiFetch<{ category: MerchantCategory }>(`/admin/merchant/categories/${id}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteMerchantCategory(id: string): Promise<{ id: string; object: string; deleted: boolean }> {
+  return apiFetch(`/admin/merchant/categories/${id}`, {
+    method: "DELETE",
   })
 }
 

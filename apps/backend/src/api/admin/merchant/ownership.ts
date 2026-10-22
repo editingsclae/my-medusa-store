@@ -62,3 +62,51 @@ export function uniqueAddresses(
 
   return result
 }
+
+// Category handles are globally unique in Medusa, so two merchants could never
+// both have "keyboards". A merchant category is stored with its sales channel
+// id in front of the handle and shown to the merchant and the storefront
+// without it. The separator "--" cannot appear in a slug, which keeps the
+// split unambiguous.
+const CATEGORY_HANDLE_SEPARATOR = "--"
+
+// Turns a name or handle into a URL slug. Accents are removed, so a French
+// name such as "Accessoires electroniques" with accents becomes
+// "accessoires-electroniques". Names in scripts without Latin letters (for
+// example Arabic) give an empty string and the caller picks a fallback.
+export function slugifyHandle(input: unknown): string {
+  if (typeof input !== "string") {
+    return ""
+  }
+
+  return input
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "")
+}
+
+export function categoryHandlePrefix(salesChannelId: string): string {
+  return `${salesChannelId.toLowerCase()}${CATEGORY_HANDLE_SEPARATOR}`
+}
+
+export function toStoredCategoryHandle(
+  salesChannelId: string,
+  slug: string
+): string {
+  return `${categoryHandlePrefix(salesChannelId)}${slug}`
+}
+
+export function toPublicCategoryHandle(
+  salesChannelId: string,
+  storedHandle: string
+): string {
+  const prefix = categoryHandlePrefix(salesChannelId)
+
+  return storedHandle.startsWith(prefix)
+    ? storedHandle.slice(prefix.length)
+    : storedHandle
+}

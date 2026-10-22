@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { createProductsWorkflow, createInventoryLevelsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../utils"
+import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -45,6 +46,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "updated_at",
       "sales_channels.id",
       "sales_channels.name",
+      "categories.id",
+      "categories.name",
       "variants.id",
       "variants.title",
       "variants.sku",
@@ -64,8 +67,14 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
+  const visibleProducts = await onlyOwnedCategories(
+    req.scope,
+    context.salesChannelId,
+    (products || []) as any[]
+  )
+
   // Compute inventory_quantity for each variant from its location_levels
-  const enhancedProducts = (products || []).map((product: any) => {
+  const enhancedProducts = visibleProducts.map((product: any) => {
     const variants = (product.variants || []).map((v: any) => {
       let totalStock = 0
       const inventoryItems = v.inventory_items || []
@@ -113,6 +122,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
+  // Every category id must be one of this merchant's own categories
+  const categoryIds =
+    body.category_ids !== undefined
+      ? await assertCategoriesOwned(req.scope, context.salesChannelId, body.category_ids)
+      : []
+
   const initialStock = body.inventory_quantity !== undefined ? Number(body.inventory_quantity) : 10
 
   // Format product input for createProductsWorkflow
@@ -131,6 +146,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
         id: context.salesChannelId,
       },
     ],
+    ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
     options: body.options?.length
       ? body.options
       : [{ title: "Default Option", values: ["Default"] }],

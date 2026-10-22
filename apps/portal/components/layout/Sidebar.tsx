@@ -21,6 +21,7 @@ export default function Sidebar() {
   const isDashboardActive = pathname === '/dashboard';
   const isProductsActive = pathname === '/products' || pathname.startsWith('/products/');
   const isCustomersActive = pathname === '/customers' || pathname.startsWith('/customers/');
+  const isCategoriesActive = pathname === '/categories' || pathname.startsWith('/categories/');
   const isOrdersActive = pathname === '/orders' || pathname.startsWith('/orders/');
 
   return (
@@ -184,7 +185,8 @@ export default function Sidebar() {
 
         {/* Category */}
         <Link
-          href="#"
+          href="/categories"
+          aria-current={isCategoriesActive ? 'page' : undefined}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -193,7 +195,8 @@ export default function Sidebar() {
             boxSizing: 'border-box',
             padding: '0 6px',
             borderRadius: '24px',
-            color: '#F1F3F8',
+            background: isCategoriesActive ? 'var(--accent)' : 'transparent',
+            color: isCategoriesActive ? '#FFFFFF' : '#F1F3F8',
             textDecoration: 'none',
             fontSize: '16px',
             fontWeight: 500,
@@ -205,8 +208,8 @@ export default function Sidebar() {
               height: '36px',
               boxSizing: 'border-box',
               borderRadius: '50%',
-              border: '1px solid #2B3245',
-              background: '#0B1020',
+              border: isCategoriesActive ? '1px solid rgba(255,255,255,0.5)' : '1px solid #2B3245',
+              background: isCategoriesActive ? 'rgba(255,255,255,0.14)' : '#0B1020',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
