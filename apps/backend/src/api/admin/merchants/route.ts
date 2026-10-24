@@ -43,19 +43,22 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       })
       salesChannel = channels?.[0] || null
 
-      const { metadata: prodMeta } = await query.graph({
+      // The total only comes back when a page is requested, so ask for one row
+      const { data: prodRows, metadata: prodMeta } = await query.graph({
         entity: "product",
         fields: ["id"],
         filters: { sales_channels: { id: channelId } } as any,
+        pagination: { take: 1, skip: 0 },
       })
-      productCount = prodMeta?.count ?? 0
+      productCount = prodMeta?.count ?? prodRows.length
 
-      const { metadata: ordMeta } = await query.graph({
+      const { data: ordRows, metadata: ordMeta } = await query.graph({
         entity: "order",
         fields: ["id"],
         filters: { sales_channel_id: channelId },
+        pagination: { take: 1, skip: 0 },
       })
-      orderCount = ordMeta?.count ?? 0
+      orderCount = ordMeta?.count ?? ordRows.length
     }
 
     merchants.push({
