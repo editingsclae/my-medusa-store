@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -12,17 +12,26 @@ import {
   CouponsIcon,
   SettingsIcon,
   LogoutIcon,
+  MerchantsIcon,
 } from '@/components/icons';
-import { removeStoredToken } from '@/lib/medusa';
+import { getMerchantMe, removeStoredToken } from '@/lib/medusa';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  useEffect(() => {
+    getMerchantMe()
+      .then((profile) => setIsPlatformAdmin(Boolean(profile.is_super_admin)))
+      .catch(() => setIsPlatformAdmin(false));
+  }, []);
 
   const isDashboardActive = pathname === '/dashboard';
   const isProductsActive = pathname === '/products' || pathname.startsWith('/products/');
   const isCustomersActive = pathname === '/customers' || pathname.startsWith('/customers/');
   const isCategoriesActive = pathname === '/categories' || pathname.startsWith('/categories/');
   const isOrdersActive = pathname === '/orders' || pathname.startsWith('/orders/');
+  const isMerchantsActive = pathname === '/merchants' || pathname.startsWith('/merchants/');
 
   return (
     <aside
@@ -333,6 +342,47 @@ export default function Sidebar() {
           </span>
           Settings
         </Link>
+
+        {/* Merchants: platform admins only (the backend enforces this too) */}
+        {isPlatformAdmin && (
+          <Link
+            href="/merchants"
+            aria-current={isMerchantsActive ? 'page' : undefined}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              height: '48px',
+              boxSizing: 'border-box',
+              padding: '0 6px',
+              borderRadius: '24px',
+              background: isMerchantsActive ? 'var(--accent)' : 'transparent',
+              color: isMerchantsActive ? '#FFFFFF' : '#F1F3F8',
+              textDecoration: 'none',
+              fontSize: '16px',
+              fontWeight: 500,
+            }}
+          >
+            <span
+              style={{
+                width: '36px',
+                height: '36px',
+                boxSizing: 'border-box',
+                borderRadius: '50%',
+                border: isMerchantsActive ? '1px solid rgba(255,255,255,0.5)' : '1px solid #2B3245',
+                background: isMerchantsActive ? 'rgba(255,255,255,0.14)' : '#0B1020',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 'none',
+                color: '#FFFFFF',
+              }}
+            >
+              <MerchantsIcon />
+            </span>
+            Merchants
+          </Link>
+        )}
       </nav>
 
       <div style={{ flex: '1 1 16px' }} />
