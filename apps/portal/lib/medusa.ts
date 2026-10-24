@@ -11,14 +11,45 @@ export interface MerchantUser {
 
 export interface MerchantProfile {
   user: MerchantUser
-  sales_channel: {
+  // Platform admins have no store of their own
+  sales_channel?: {
     id: string
     name: string
     description?: string | null
-  }
+  } | null
   stock_location_id?: string
   currency_code: string
   is_super_admin: boolean
+}
+
+// What GET /admin/merchant/me actually returns: everything sits under "merchant"
+interface MerchantMeResponse {
+  merchant: {
+    id: string
+    email: string
+    first_name?: string | null
+    last_name?: string | null
+    is_super_admin?: boolean
+    sales_channel?: { id: string; name: string; description?: string | null } | null
+    stock_location_id?: string
+    currency_code: string
+  }
+}
+
+function toMerchantProfile(res: MerchantMeResponse): MerchantProfile {
+  const m = res.merchant
+  return {
+    user: {
+      id: m.id,
+      email: m.email,
+      first_name: m.first_name,
+      last_name: m.last_name,
+    },
+    sales_channel: m.sales_channel ?? null,
+    stock_location_id: m.stock_location_id,
+    currency_code: m.currency_code,
+    is_super_admin: m.is_super_admin === true,
+  }
 }
 
 export interface MerchantAnalytics {
@@ -248,7 +279,7 @@ export async function loginMerchant(email: string, password: string): Promise<{ 
   setStoredToken(authRes.token)
 
   // Step 2: Validate merchant context & sales channel
-  const profileRes = await apiFetch<MerchantProfile>("/admin/merchant/me", {
+  const profileRes = await apiFetch<MerchantMeResponse>("/admin/merchant/me", {
     headers: {
       Authorization: `Bearer ${authRes.token}`,
     },
@@ -256,12 +287,12 @@ export async function loginMerchant(email: string, password: string): Promise<{ 
 
   return {
     token: authRes.token,
-    profile: profileRes,
+    profile: toMerchantProfile(profileRes),
   }
 }
 
 export async function getMerchantMe(): Promise<MerchantProfile> {
-  return apiFetch<MerchantProfile>("/admin/merchant/me")
+  return toMerchantProfile(await apiFetch<MerchantMeResponse>("/admin/merchant/me"))
 }
 
 // Analytics
