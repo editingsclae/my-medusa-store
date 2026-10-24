@@ -105,6 +105,20 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
+  // Refuse a duplicate email now, before a sales channel, location and key exist
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const { data: existingUsers } = await query.graph({
+    entity: "user",
+    fields: ["id"],
+    filters: { email: merchantEmail },
+  })
+  if (existingUsers.length > 0) {
+    throw new MedusaError(
+      MedusaError.Types.DUPLICATE_ERROR,
+      `A user with the email ${merchantEmail} already exists`
+    )
+  }
+
   // 1. Create Sales Channel
   const { result: channelResult } = await createSalesChannelsWorkflow(req.scope).run({
     input: {

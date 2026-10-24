@@ -24,8 +24,9 @@ export default function LoginForm() {
     setError(null);
     setLoading(true);
     try {
-      await loginMerchant(email.trim(), password);
-      router.push('/dashboard');
+      const { profile } = await loginMerchant(email.trim(), password);
+      // Platform admins have no store of their own; their page is the merchant list
+      router.push(profile.is_super_admin ? '/merchants' : '/dashboard');
     } catch (err: any) {
       setError(err.message || 'Invalid credentials or login failed');
     } finally {

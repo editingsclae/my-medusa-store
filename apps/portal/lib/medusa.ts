@@ -517,3 +517,57 @@ export async function getMerchantCustomers(params?: {
 export async function getMerchantCustomer(id: string): Promise<{ customer: MerchantCustomer; orders: MerchantOrder[] }> {
   return apiFetch<{ customer: MerchantCustomer; orders: MerchantOrder[] }>(`/admin/merchant/customers/${id}`)
 }
+
+
+// Platform admin only: the backend refuses these routes for merchant accounts.
+export interface PlatformMerchant {
+  user: {
+    id: string
+    email: string
+    first_name?: string | null
+    last_name?: string | null
+    created_at?: string
+  }
+  sales_channel: {
+    id: string
+    name: string
+    description?: string | null
+    is_disabled?: boolean
+  } | null
+  stock_location_id?: string
+  product_count: number
+  order_count: number
+}
+
+export interface CreatedMerchant {
+  user: { id: string; email: string }
+  sales_channel: { id: string; name: string }
+  stock_location: { id: string; name?: string }
+  publishable_key: string
+  fulfillment?: {
+    created: boolean
+    countries?: string[]
+    currency_code?: string
+    shipping_option_id?: string
+  } | null
+  fulfillment_error?: string
+}
+
+export async function getPlatformMerchants(): Promise<{ merchants: PlatformMerchant[] }> {
+  return apiFetch<{ merchants: PlatformMerchant[] }>("/admin/merchants")
+}
+
+export async function createPlatformMerchant(data: {
+  name: string
+  email: string
+  password: string
+  first_name?: string
+  last_name?: string
+  countries?: string[]
+  shipping_price?: number
+}): Promise<{ message: string; merchant: CreatedMerchant }> {
+  return apiFetch<{ message: string; merchant: CreatedMerchant }>("/admin/merchants", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
