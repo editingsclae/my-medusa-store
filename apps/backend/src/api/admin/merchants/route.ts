@@ -8,6 +8,11 @@ import {
   linkSalesChannelsToApiKeyWorkflow,
   createUsersWorkflow,
 } from "@medusajs/core-flows"
+import {
+  normalizeCountries,
+  parseShippingAmount,
+  provisionMerchantFulfillment,
+} from "../merchant/fulfillment"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
@@ -84,6 +89,22 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const merchantName = body.name.trim()
   const merchantEmail = body.email.trim().toLowerCase()
 
+  // Validate the delivery settings before anything is created
+  const { countries, invalid } = normalizeCountries(body.countries)
+  if (invalid.length > 0) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      `Invalid country codes: ${invalid.join(", ")}. Use two-letter codes such as "tn".`
+    )
+  }
+  const shippingAmount = parseShippingAmount(body.shipping_price)
+  if (shippingAmount === null) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "shipping_price must be a number that is zero or more"
+    )
+  }
+
   // 1. Create Sales Channel
   const { result: channelResult } = await createSalesChannelsWorkflow(req.scope).run({
     input: {
@@ -116,6 +137,23 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       add: [salesChannel.id],
     },
   })
+
+  // 3b. Delivery setup (fulfillment set, zone, shipping option). The merchant
+  // already exists at this point, so a failure is reported instead of thrown;
+  // it can be repeated with the backfill script.
+  let fulfillmentResult: Record<string, unknown> | null = null
+  let fulfillmentError: string | null = null
+  try {
+    fulfillmentResult = await provisionMerchantFulfillment(req.scope, {
+      merchantName,
+      stockLocationId: stockLocation.id,
+      countries,
+      shippingAmount,
+    })
+  } catch (err) {
+    fulfillmentError = err instanceof Error ? err.message : String(err)
+    console.warn("Could not set up merchant fulfillment:", err)
+  }
 
   // 4. Create Publishable API Key for this Sales Channel (for storefront)
   const currentUserId = (req as any).auth_context?.actor_id || "admin"
@@ -190,6 +228,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       sales_channel: salesChannel,
       stock_location: stockLocation,
       publishable_key: apiKey.token,
+      fulfillment: fulfillmentResult,
+      ...(fulfillmentError ? { fulfillment_error: fulfillmentError } : {}),
     },
   })
 }

@@ -3,6 +3,7 @@ import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/util
 import { createProductsWorkflow, createInventoryLevelsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../utils"
 import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
+import { getDefaultShippingProfileId } from "../fulfillment"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -141,6 +142,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     images: body.images?.map((url: string | { url: string }) =>
       typeof url === "string" ? { url } : url
     ),
+    // Without a shipping profile Medusa cannot complete a cart that contains this product
+    shipping_profile_id: await getDefaultShippingProfileId(req.scope),
     sales_channels: [
       {
         id: context.salesChannelId,
