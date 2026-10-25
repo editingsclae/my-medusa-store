@@ -1,6 +1,11 @@
 import { buildStoreCategories } from "../store-categories"
 import { GET } from "../store/merchant/categories/route"
 
+jest.mock("../../links/sales-channel-product-category", () => ({
+  __esModule: true,
+  default: { entryPoint: "sales_channel_product_category" },
+}))
+
 const prefixA = "sc_a--"
 const prefixB = "sc_b--"
 
