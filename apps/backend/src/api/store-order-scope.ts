@@ -4,6 +4,7 @@ import type {
   MedusaResponse,
 } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
+import { salesChannelIdsFromKey } from "./store-key"
 
 /**
  * Keeps a storefront's order calls inside its own merchant.
@@ -13,17 +14,6 @@ import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/util
  * shopper's orders from all merchants. The sales channels come from the
  * publishable key of the request, which the storefront cannot change.
  */
-
-function channelsOf(req: MedusaRequest): string[] {
-  const ids = (req as any).publishable_key_context?.sales_channel_ids
-  if (!Array.isArray(ids) || ids.length === 0) {
-    throw new MedusaError(
-      MedusaError.Types.INVALID_DATA,
-      "Publishable key needs to have a sales channel configured"
-    )
-  }
-  return ids
-}
 
 /**
  * Makes `req.filterableFields.sales_channel_id` always equal the key's channels,
@@ -58,7 +48,7 @@ export function scopeStoreOrdersToKey(
   next: MedusaNextFunction
 ) {
   try {
-    applySalesChannelScope(req as any, channelsOf(req))
+    applySalesChannelScope(req as any, salesChannelIdsFromKey(req))
     return next()
   } catch (error) {
     return next(error)
@@ -72,7 +62,7 @@ export async function restrictStoreOrderToKey(
   next: MedusaNextFunction
 ) {
   try {
-    const channelIds = channelsOf(req)
+    const channelIds = salesChannelIdsFromKey(req)
     const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
     const { data } = await query.graph({
