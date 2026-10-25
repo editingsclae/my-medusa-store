@@ -1,6 +1,7 @@
 import { authenticate, configureStoreSearch, defineMiddlewares } from '@medusajs/framework/http'
 import multer from 'multer'
 import { blockMerchantsFromCoreAdmin } from './merchant-guard'
+import { restrictStoreOrderToKey, scopeStoreOrdersToKey } from './store-order-scope'
 
 const upload = multer({ storage: multer.memoryStorage() })
 
@@ -20,6 +21,18 @@ export default defineMiddlewares({
         }),
         blockMerchantsFromCoreAdmin,
       ],
+    },
+    {
+      // Customers are shared by every merchant, but a storefront may only see
+      // the orders of the merchant its publishable key belongs to
+      method: ['GET'],
+      matcher: '/store/orders',
+      middlewares: [scopeStoreOrdersToKey],
+    },
+    {
+      method: ['GET'],
+      matcher: '/store/orders/:id',
+      middlewares: [restrictStoreOrderToKey],
     },
     {
       method: ['POST'],
