@@ -32,6 +32,7 @@ export default function Sidebar() {
   const isCategoriesActive = pathname === '/categories' || pathname.startsWith('/categories/');
   const isOrdersActive = pathname === '/orders' || pathname.startsWith('/orders/');
   const isMerchantsActive = pathname === '/merchants' || pathname.startsWith('/merchants/');
+  const isSettingsActive = pathname === '/settings' || pathname.startsWith('/settings/');
 
   return (
     <aside
@@ -308,7 +309,8 @@ export default function Sidebar() {
 
         {/* Settings */}
         <Link
-          href="#"
+          href="/settings"
+          aria-current={isSettingsActive ? 'page' : undefined}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -317,7 +319,8 @@ export default function Sidebar() {
             boxSizing: 'border-box',
             padding: '0 6px',
             borderRadius: '24px',
-            color: '#F1F3F8',
+            background: isSettingsActive ? 'var(--accent)' : 'transparent',
+            color: isSettingsActive ? '#FFFFFF' : '#F1F3F8',
             textDecoration: 'none',
             fontSize: '16px',
             fontWeight: 500,
@@ -329,8 +332,8 @@ export default function Sidebar() {
               height: '36px',
               boxSizing: 'border-box',
               borderRadius: '50%',
-              border: '1px solid #2B3245',
-              background: '#0B1020',
+              border: isSettingsActive ? '1px solid rgba(255,255,255,0.5)' : '1px solid #2B3245',
+              background: isSettingsActive ? 'rgba(255,255,255,0.14)' : '#0B1020',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
