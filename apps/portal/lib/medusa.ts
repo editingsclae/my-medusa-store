@@ -584,6 +584,58 @@ export interface CreatedMerchant {
   fulfillment_error?: string
 }
 
+// -------------------------------------------------------------
+// Delivery settings (merchant)
+// -------------------------------------------------------------
+export interface DeliveryOption {
+  id: string
+  name: string
+  price: number | null
+  currency_code: string
+  enabled: boolean
+  is_flat: boolean
+}
+
+export interface DeliveryOptionsResponse {
+  delivery_options: DeliveryOption[]
+  currency_code: string
+  countries: string[]
+  can_add: boolean
+}
+
+export async function getDeliveryOptions(): Promise<DeliveryOptionsResponse> {
+  return apiFetch<DeliveryOptionsResponse>("/admin/merchant/delivery-options")
+}
+
+export async function createDeliveryOption(data: {
+  name: string
+  price: number
+}): Promise<{ delivery_option: DeliveryOption }> {
+  return apiFetch<{ delivery_option: DeliveryOption }>("/admin/merchant/delivery-options", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateDeliveryOption(
+  id: string,
+  data: { name?: string; price?: number; enabled?: boolean }
+): Promise<{ delivery_option: DeliveryOption | null }> {
+  return apiFetch<{ delivery_option: DeliveryOption | null }>(
+    `/admin/merchant/delivery-options/${encodeURIComponent(id)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    }
+  )
+}
+
+export async function deleteDeliveryOption(id: string): Promise<void> {
+  await apiFetch(`/admin/merchant/delivery-options/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
 export async function getPlatformMerchants(): Promise<{ merchants: PlatformMerchant[] }> {
   return apiFetch<{ merchants: PlatformMerchant[] }>("/admin/merchants")
 }
