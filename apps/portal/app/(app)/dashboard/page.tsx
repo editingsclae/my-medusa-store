@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import PageHeader from '@/components/layout/PageHeader';
 import KpiTile from '@/components/dashboard/KpiTile';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import PendingFulfillment from '@/components/dashboard/PendingFulfillment';
 import TopProducts from '@/components/dashboard/TopProducts';
-import AddProductModal from '@/components/products/AddProductModal';
 import { KPI_TILES_DATA, getDailyRevenueData, DailyRevenue, KpiData } from '@/lib/dashboard-data';
 import { getMerchantAnalytics, getMerchantProducts, MerchantAnalytics } from '@/lib/medusa';
 import { CalendarIcon, ChevronDownIcon, PlusIcon } from '@/components/icons';
@@ -14,7 +14,6 @@ import { CalendarIcon, ChevronDownIcon, PlusIcon } from '@/components/icons';
 export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<MerchantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -138,9 +137,8 @@ export default function DashboardPage() {
           <ChevronDownIcon style={{ marginLeft: '4px' }} />
         </button>
 
-        <button
-          type="button"
-          onClick={() => setIsAddModalOpen(true)}
+        <Link
+          href="/products/new"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -155,11 +153,12 @@ export default function DashboardPage() {
             fontWeight: 500,
             color: '#FFFFFF',
             cursor: 'pointer',
+            textDecoration: 'none',
           }}
         >
           <PlusIcon />
           Add Product
-        </button>
+        </Link>
       </PageHeader>
 
       {/* Content wrapper */}
@@ -208,15 +207,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Add Product Modal */}
-      <AddProductModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSuccess={() => {
-          // Refresh analytics after product creation
-          getMerchantAnalytics().then(setAnalytics).catch(() => {});
-        }}
-      />
+
     </>
   );
 }
