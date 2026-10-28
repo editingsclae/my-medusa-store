@@ -35,6 +35,12 @@ export default defineMiddlewares({
       middlewares: [restrictStoreOrderToKey],
     },
     {
+      // Moving a guest's earlier orders to the logged-in account
+      method: ['POST'],
+      matcher: '/store/merchant/claim-orders',
+      middlewares: [authenticate('customer', ['session', 'bearer'])],
+    },
+    {
       method: ['POST'],
       matcher: '/store/search',
       middlewares: [
