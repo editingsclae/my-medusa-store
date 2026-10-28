@@ -26,7 +26,6 @@ const OPTION_FIELDS = [
   "shipping_profile_id",
   "service_zone_id",
   "*rules",
-  "rules.values.value",
   "*prices",
   "*prices.price_rules",
 ]
@@ -101,5 +100,11 @@ export async function loadMerchantDelivery(
     filters: { service_zone_id: zones.map((z) => z.id) },
   })
 
-  return { stockLocationId, currencyCode, zones, options: options as RawOption[] }
+  // A list that did not load can contain empty entries; drop them here too
+  return {
+    stockLocationId,
+    currencyCode,
+    zones,
+    options: (options as RawOption[]).filter((o) => o && typeof o === "object"),
+  }
 }

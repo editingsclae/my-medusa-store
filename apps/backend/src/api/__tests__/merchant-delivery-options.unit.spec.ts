@@ -294,3 +294,70 @@ describe("leavesNoEnabledOption", () => {
     expect(leavesNoEnabledOption([option("a"), off("b")] as any, "b", false)).toBe(false)
   })
 })
+
+// Medusa's query can return a list with an empty entry in it. This is what the
+// live backend did with the rules of a shipping option, and it crashed the list
+// route with "Cannot read properties of undefined (reading 'attribute')".
+describe("lists that contain empty entries", () => {
+  it("reads an option whose rules list holds an undefined entry", () => {
+    const messy = option("a", { rules: [undefined, enabledRule("false"), null, returnRule] })
+    expect(isOptionEnabled(messy as any)).toBe(false)
+    expect(serializeOption(messy as any, "tnd").enabled).toBe(false)
+  })
+
+  it("treats a rules list of only empty entries as enabled", () => {
+    expect(isOptionEnabled(option("a", { rules: [undefined] }) as any)).toBe(true)
+  })
+
+  it("reads the price when a price row or its rules are empty entries", () => {
+    const messy = option("a", {
+      prices: [
+        null,
+        { id: "p_cur", amount: 7, currency_code: "tnd", price_rules: [undefined, null] },
+        undefined,
+      ],
+    })
+    expect(readOptionPrice(messy as any, "tnd")).toBe(7)
+  })
+
+  it("keeps rules and prices when rebuilding an update from a messy list", () => {
+    expect(buildRulesForEnabled([undefined, enabledRule(), returnRule] as any, false)).toEqual([
+      { id: "r_enabled", attribute: "enabled_in_store", operator: "eq", value: "false" },
+      { id: "r_return", attribute: "is_return", operator: "eq", value: "false" },
+    ])
+    expect(buildPriceUpdate([null, ...option("a").prices] as any, 4, "tnd")).toEqual([
+      { id: "p_cur", currency_code: "tnd", amount: 4 },
+      { id: "p_reg", region_id: "reg_tn", amount: 4 },
+    ])
+  })
+
+  it("does not crash when an option itself is an empty entry", () => {
+    const list = [undefined, option("so_1"), null] as any
+    expect(findOwnedOption(list, "so_1")?.id).toBe("so_1")
+    expect(findOwnedOption(list, "so_x")).toBe(undefined)
+    expect(leavesNoEnabledOption(list, "so_1", false)).toBe(true)
+  })
+})
+
+describe("price amounts in the shapes Medusa returns", () => {
+  it("falls back to raw_amount when amount is missing", () => {
+    const raw = option("a", {
+      prices: [{ id: "p", amount: null, raw_amount: { value: "8.5" }, currency_code: "tnd", price_rules: [] }],
+    })
+    expect(readOptionPrice(raw as any, "tnd")).toBe(8.5)
+  })
+
+  it("prefers amount when both are present", () => {
+    const both = option("a", {
+      prices: [{ id: "p", amount: 9, raw_amount: { value: "1" }, currency_code: "tnd", price_rules: [] }],
+    })
+    expect(readOptionPrice(both as any, "tnd")).toBe(9)
+  })
+
+  it("gives no price when neither amount is usable", () => {
+    const none = option("a", {
+      prices: [{ id: "p", amount: null, raw_amount: null, currency_code: "tnd", price_rules: [] }],
+    })
+    expect(readOptionPrice(none as any, "tnd")).toBe(null)
+  })
+})

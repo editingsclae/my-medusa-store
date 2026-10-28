@@ -25,7 +25,8 @@ type PriceRule = {
 
 export type RawPrice = {
   id: string
-  amount: number | string
+  amount?: number | string | null
+  raw_amount?: { value?: number | string | null } | null
   currency_code?: string | null
   price_rules?: PriceRule[] | null
 }
@@ -92,9 +93,21 @@ function normalizePrice(value: number): number | null {
   return Math.round(value * 1000) / 1000
 }
 
+// Medusa's query can return lists with empty entries in them (a rule or price
+// that did not load), so every list is cleaned before it is read.
+function clean<T>(list: unknown): T[] {
+  if (!Array.isArray(list)) {
+    return []
+  }
+  return list.filter((item) => item !== null && typeof item === "object") as T[]
+}
+
+// A rule's value is stored as plain JSON: a string such as "true", or a list.
+// A `values` list of { value } objects is read too, for older shapes.
 function ruleValues(rule: RawRule): string[] {
-  if (Array.isArray(rule.values)) {
-    return rule.values.map((v) => String(v.value))
+  const listed = clean<{ value?: unknown }>(rule.values)
+  if (listed.length > 0) {
+    return listed.map((v) => String(v.value))
   }
   if (Array.isArray(rule.value)) {
     return rule.value.map(String)
@@ -102,14 +115,24 @@ function ruleValues(rule: RawRule): string[] {
   return rule.value === undefined || rule.value === null ? [] : [String(rule.value)]
 }
 
+// The amount of a price row. Medusa also keeps it as raw_amount.value.
+function priceAmount(price: RawPrice): number {
+  const direct = Number(price.amount)
+  if (price.amount !== undefined && price.amount !== null && Number.isFinite(direct)) {
+    return direct
+  }
+  const raw = Number(price.raw_amount?.value)
+  return Number.isFinite(raw) ? raw : NaN
+}
+
 // Prices that depend on the cart total (free delivery above an amount, for
 // example) are kept as they are and never edited here.
 function itemTotalRules(price: RawPrice): PriceRule[] {
-  return (price.price_rules || []).filter((r) => r.attribute === "item_total")
+  return clean<PriceRule>(price.price_rules).filter((r) => r.attribute === "item_total")
 }
 
 function regionIdOf(price: RawPrice): string | null {
-  const rule = (price.price_rules || []).find((r) => r.attribute === "region_id")
+  const rule = clean<PriceRule>(price.price_rules).find((r) => r.attribute === "region_id")
   return rule && rule.value ? String(rule.value) : null
 }
 
@@ -117,7 +140,7 @@ function regionIdOf(price: RawPrice): string | null {
 // a region or a cart total condition.
 export function readOptionPrice(option: RawOption, currencyCode: string): number | null {
   const currency = currencyCode.toLowerCase()
-  const plain = (option.prices || []).filter(
+  const plain = clean<RawPrice>(option.prices).filter(
     (p) => !regionIdOf(p) && itemTotalRules(p).length === 0
   )
   const row =
@@ -126,14 +149,14 @@ export function readOptionPrice(option: RawOption, currencyCode: string): number
   if (!row) {
     return null
   }
-  const amount = Number(row.amount)
+  const amount = priceAmount(row)
   return Number.isFinite(amount) ? amount : null
 }
 
 // An option with no enabled_in_store rule is offered to everybody, so only an
 // explicit "false" switches it off.
 export function isOptionEnabled(option: RawOption): boolean {
-  const rule = (option.rules || []).find((r) => r.attribute === ENABLED_RULE_ATTRIBUTE)
+  const rule = clean<RawRule>(option.rules).find((r) => r.attribute === ENABLED_RULE_ATTRIBUTE)
   if (!rule) {
     return true
   }
@@ -165,7 +188,7 @@ export function buildPriceUpdate(
   const rows: Array<Record<string, unknown>> = []
   let hasPlainRow = false
 
-  for (const price of existing) {
+  for (const price of clean<RawPrice>(existing)) {
     const regionId = regionIdOf(price)
     const base: Record<string, unknown> = regionId
       ? { id: price.id, region_id: regionId }
@@ -175,7 +198,7 @@ export function buildPriceUpdate(
     if (conditions.length > 0) {
       rows.push({
         ...base,
-        amount: Number(price.amount),
+        amount: priceAmount(price),
         rules: conditions.map((r) => ({
           attribute: "item_total",
           operator: r.operator || "eq",
@@ -207,7 +230,7 @@ export function buildRulesForEnabled(
   const rules: Array<Record<string, unknown>> = []
   let found = false
 
-  for (const rule of existing) {
+  for (const rule of clean<RawRule>(existing)) {
     if (rule.attribute === ENABLED_RULE_ATTRIBUTE) {
       found = true
       rules.push({ id: rule.id, attribute: rule.attribute, operator: "eq", value })
@@ -232,7 +255,7 @@ export function findOwnedOption(options: RawOption[], id: unknown): RawOption | 
   if (typeof id !== "string") {
     return undefined
   }
-  return options.find((o) => o.id === id)
+  return clean<RawOption>(options).find((o) => o.id === id)
 }
 
 // Checkout needs at least one option shoppers can pick. Switching off or
@@ -245,5 +268,5 @@ export function leavesNoEnabledOption(
   if (targetStaysEnabled) {
     return false
   }
-  return !options.some((o) => o.id !== targetId && isOptionEnabled(o))
+  return !clean<RawOption>(options).some((o) => o.id !== targetId && isOptionEnabled(o))
 }
