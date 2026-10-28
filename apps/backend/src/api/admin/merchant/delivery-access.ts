@@ -18,6 +18,9 @@ export type MerchantDelivery = {
   options: RawOption[]
 }
 
+// Fields use the "relation.*" form. The "*relation" shorthand only works in
+// the framework's own routes; in query.graph it is read as a plain field name,
+// the relation never loads, and the list comes back empty or with empty entries.
 const OPTION_FIELDS = [
   "id",
   "name",
@@ -25,9 +28,9 @@ const OPTION_FIELDS = [
   "provider_id",
   "shipping_profile_id",
   "service_zone_id",
-  "*rules",
-  "*prices",
-  "*prices.price_rules",
+  "rules.*",
+  "prices.*",
+  "prices.price_rules.*",
 ]
 
 // The stock location a delivery request works on. A merchant uses the one in
