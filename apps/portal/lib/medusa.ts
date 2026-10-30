@@ -636,6 +636,52 @@ export async function deleteDeliveryOption(id: string): Promise<void> {
   })
 }
 
+// -------------------------------------------------------------
+// Storefront banners (merchant): hero slides and promo banners
+// -------------------------------------------------------------
+export type BannerLinkType = "none" | "shop" | "category" | "product"
+
+export interface StorefrontBanner {
+  id: string
+  enabled: boolean
+  image_url: string
+  label: string
+  title: string
+  text: string
+  button_label: string
+  link: { type: BannerLinkType; handle?: string }
+}
+
+export interface StorefrontContent {
+  hero_slides: StorefrontBanner[]
+  promo_banners: StorefrontBanner[]
+}
+
+export interface StorefrontLimits {
+  hero_slides: number
+  promo_banners: number
+  label: number
+  title: number
+  text: number
+  button_label: number
+}
+
+export interface StorefrontResponse {
+  storefront: StorefrontContent
+  limits: StorefrontLimits
+}
+
+export async function getStorefrontContent(): Promise<StorefrontResponse> {
+  return apiFetch<StorefrontResponse>("/admin/merchant/storefront")
+}
+
+export async function saveStorefrontContent(content: StorefrontContent): Promise<StorefrontResponse> {
+  return apiFetch<StorefrontResponse>("/admin/merchant/storefront", {
+    method: "POST",
+    body: JSON.stringify(content),
+  })
+}
+
 export async function getPlatformMerchants(): Promise<{ merchants: PlatformMerchant[] }> {
   return apiFetch<{ merchants: PlatformMerchant[] }>("/admin/merchants")
 }

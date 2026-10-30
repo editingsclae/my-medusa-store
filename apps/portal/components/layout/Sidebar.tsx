@@ -309,7 +309,7 @@ export default function Sidebar() {
 
         {/* Settings */}
         <Link
-          href="/settings"
+          href="/settings/delivery"
           aria-current={isSettingsActive ? 'page' : undefined}
           style={{
             display: 'flex',
