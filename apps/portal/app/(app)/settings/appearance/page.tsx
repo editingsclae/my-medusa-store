@@ -486,7 +486,7 @@ export default function AppearanceSettingsPage() {
       const res = await saveStorefrontContent(content);
       setContent(res.storefront);
       setSavedJson(JSON.stringify(res.storefront));
-      setMessage({ kind: 'ok', text: 'Saved. Your store shows the new banners within a minute.' });
+      setMessage({ kind: 'ok', text: 'Saved. Your store shows the new banners right away.' });
     } catch (err) {
       setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save.' });
     } finally {
