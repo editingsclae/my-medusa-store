@@ -637,7 +637,7 @@ export async function deleteDeliveryOption(id: string): Promise<void> {
 }
 
 // -------------------------------------------------------------
-// Storefront banners (merchant): hero slides and promo banners
+// Storefront content (merchant): hero slides, promo banners, category tiles
 // -------------------------------------------------------------
 export type BannerLinkType = "none" | "shop" | "category" | "product"
 
@@ -652,14 +652,23 @@ export interface StorefrontBanner {
   link: { type: BannerLinkType; handle?: string }
 }
 
+// A category shown on the home page with its own picture
+export interface StorefrontCategoryTile {
+  id: string
+  category_id: string
+  image_url: string
+}
+
 export interface StorefrontContent {
   hero_slides: StorefrontBanner[]
   promo_banners: StorefrontBanner[]
+  category_tiles: StorefrontCategoryTile[]
 }
 
 export interface StorefrontLimits {
   hero_slides: number
   promo_banners: number
+  category_tiles: number
   label: number
   title: number
   text: number
