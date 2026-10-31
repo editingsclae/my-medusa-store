@@ -1,7 +1,8 @@
-// The banners a merchant shows on the landing page of its storefront: up to 3
-// hero slides and up to 2 promo banners. They are kept in the metadata of the
-// merchant's sales channel (key "storefront"). No framework imports, so the
-// rules can be unit tested on their own.
+// What a merchant shows on the landing page of its storefront: up to 3 hero
+// slides, up to 2 promo banners and up to 8 category tiles (a category with its
+// own picture). They are kept in the metadata of the merchant's sales channel
+// (key "storefront"). No framework imports, so the rules can be unit tested on
+// their own.
 //
 // A banner is an image plus optional text and a link. A link is never a free
 // URL: it points at the shop, a category or a product of the same storefront,
@@ -11,6 +12,7 @@ export const STOREFRONT_METADATA_KEY = "storefront"
 
 export const MAX_HERO_SLIDES = 3
 export const MAX_PROMO_BANNERS = 2
+export const MAX_CATEGORY_TILES = 8
 
 export const MAX_LABEL_LENGTH = 40
 export const MAX_TITLE_LENGTH = 60
@@ -39,9 +41,27 @@ export type Banner = {
   link: BannerLink
 }
 
+// A category shown on the landing page with a picture. The name and the link
+// come from the category itself, so renaming a category changes the tile too.
+export type CategoryTile = {
+  id: string
+  category_id: string
+  image_url: string
+}
+
 export type StorefrontContent = {
   hero_slides: Banner[]
   promo_banners: Banner[]
+  category_tiles: CategoryTile[]
+}
+
+// A tile as a storefront receives it, with the category's public name and handle
+export type PublicCategoryTile = {
+  id: string
+  category_id: string
+  name: string
+  handle: string
+  image_url: string
 }
 
 export type ParseResult =
@@ -61,7 +81,7 @@ const MAX_ITEMS: Record<Section, number> = {
 }
 
 export function emptyContent(): StorefrontContent {
-  return { hero_slides: [], promo_banners: [] }
+  return { hero_slides: [], promo_banners: [], category_tiles: [] }
 }
 
 // Whitespace is collapsed. Anything that is not text becomes an empty string.
@@ -174,9 +194,45 @@ function parseBanner(
   return { banner }
 }
 
+const CATEGORY_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/
+
+function parseTile(
+  input: unknown,
+  index: number
+): { tile: CategoryTile } | { error: string } {
+  const where = `Category tile ${index + 1}`
+
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return { error: `${where} is not valid` }
+  }
+  const raw = input as Record<string, unknown>
+
+  if (typeof raw.category_id !== "string" || !CATEGORY_ID_PATTERN.test(raw.category_id)) {
+    return { error: `${where} needs a category` }
+  }
+  if (!isValidImageUrl(raw.image_url)) {
+    return { error: `${where} needs an image` }
+  }
+
+  return {
+    tile: {
+      id: parseId(raw.id),
+      category_id: raw.category_id,
+      image_url: raw.image_url,
+    },
+  }
+}
+
 // The content sent by the portal. It has to be complete and valid: a single
 // problem refuses everything, so a half saved page is never shown to shoppers.
-export function parseStorefrontContent(input: unknown): ParseResult {
+//
+// "category_tiles" may be left out. Then the tiles that are already stored stay
+// as they are (`current`), so a portal page that was opened before tiles existed
+// cannot wipe them by saving.
+export function parseStorefrontContent(
+  input: unknown,
+  current: StorefrontContent = emptyContent()
+): ParseResult {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     return { ok: false, error: "Send the banners as an object" }
   }
@@ -202,6 +258,33 @@ export function parseStorefrontContent(input: unknown): ParseResult {
       }
       content[section].push(parsed.banner)
     }
+  }
+
+  if (raw.category_tiles === undefined) {
+    content.category_tiles = current.category_tiles
+    return { ok: true, value: content }
+  }
+  if (!Array.isArray(raw.category_tiles)) {
+    return { ok: false, error: "category_tiles must be a list" }
+  }
+  if (raw.category_tiles.length > MAX_CATEGORY_TILES) {
+    return {
+      ok: false,
+      error: `At most ${MAX_CATEGORY_TILES} category tiles are allowed`,
+    }
+  }
+
+  const seen = new Set<string>()
+  for (let i = 0; i < raw.category_tiles.length; i++) {
+    const parsed = parseTile(raw.category_tiles[i], i)
+    if ("error" in parsed) {
+      return { ok: false, error: parsed.error }
+    }
+    if (seen.has(parsed.tile.category_id)) {
+      return { ok: false, error: "A category can only be shown once" }
+    }
+    seen.add(parsed.tile.category_id)
+    content.category_tiles.push(parsed.tile)
   }
 
   return { ok: true, value: content }
@@ -231,11 +314,24 @@ export function readStoredContent(metadata: unknown): StorefrontContent {
     }
   }
 
+  const tiles = Array.isArray(raw.category_tiles) ? (raw.category_tiles as unknown[]) : []
+  const seen = new Set<string>()
+  for (let i = 0; i < tiles.length && content.category_tiles.length < MAX_CATEGORY_TILES; i++) {
+    const parsed = parseTile(tiles[i], i)
+    if ("tile" in parsed && !seen.has(parsed.tile.category_id)) {
+      seen.add(parsed.tile.category_id)
+      content.category_tiles.push(parsed.tile)
+    }
+  }
+
   return content
 }
 
-// What a storefront receives: only the banners that are switched on.
-export function toPublicContent(content: StorefrontContent): StorefrontContent {
+// What a storefront receives: only the banners that are switched on. Tiles are
+// added separately with publicCategoryTiles, because they need the categories.
+export function toPublicContent(
+  content: StorefrontContent
+): Pick<StorefrontContent, "hero_slides" | "promo_banners"> {
   return {
     hero_slides: content.hero_slides.filter((b) => b.enabled),
     promo_banners: content.promo_banners.filter((b) => b.enabled),
@@ -252,4 +348,29 @@ export function withStorefrontContent(
       ? (metadata as Record<string, unknown>)
       : {}
   return { ...current, [STOREFRONT_METADATA_KEY]: content }
+}
+
+// The tiles a storefront may show: only those whose category is still one of
+// the merchant's public categories (active, not internal). A tile of a deleted
+// or switched off category is left out. Order is the merchant's order.
+export function publicCategoryTiles(
+  tiles: CategoryTile[],
+  categories: Array<{ id: string; name: string; handle: string }>
+): PublicCategoryTile[] {
+  const byId = new Map(categories.map((category) => [category.id, category]))
+  const result: PublicCategoryTile[] = []
+
+  for (const tile of tiles) {
+    const category = byId.get(tile.category_id)
+    if (category) {
+      result.push({
+        id: tile.id,
+        category_id: category.id,
+        name: category.name,
+        handle: category.handle,
+        image_url: tile.image_url,
+      })
+    }
+  }
+  return result
 }
