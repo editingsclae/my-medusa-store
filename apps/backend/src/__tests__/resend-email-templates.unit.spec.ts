@@ -7,6 +7,7 @@ import {
   formatMoney,
   oneLine,
   renderEmail,
+  renderEmailVerification,
   renderOrderPlaced,
   safeHttpUrl,
   toNumber,
@@ -354,5 +355,50 @@ describe("order confirmation", () => {
     expect(email.text).toContain("Total: TND 1805.00")
     expect(email.text).toContain("12 Rue de Marseille")
     expect(email.text.includes("<")).toBe(false)
+  })
+})
+
+describe("email verification", () => {
+  const data = { code: "048215", store_name: "ZARA", expires_in_minutes: 15 }
+
+  it("is found by its template name", () => {
+    const email = renderEmail(EMAIL_TEMPLATES.EMAIL_VERIFICATION, data)
+    expect(EMAIL_TEMPLATES.EMAIL_VERIFICATION).toBe("email-verification")
+    expect((email as any).subject).toBe("048215 is your ZARA confirmation code")
+  })
+
+  it("shows the code, the store and how long it works", () => {
+    const email = renderEmailVerification(data)
+    expect(email.html).toContain(">048215</div>")
+    expect(email.html).toContain("ZARA")
+    expect(email.html).toContain("15 minutes")
+    expect(email.fromName).toBe("ZARA")
+    expect(email.text).toContain("Your code: 048215")
+    expect(email.text).toContain("15 minutes")
+    expect(email.text.includes("<")).toBe(false)
+  })
+
+  it("works without a store name", () => {
+    const email = renderEmailVerification({ code: "048215" })
+    expect(email.subject).toBe("048215 is your confirmation code")
+    expect(email.fromName).toBe(null)
+    expect(email.html).toContain("15 minutes")
+  })
+
+  it("never lets store text become markup", () => {
+    const email = renderEmailVerification({ ...data, store_name: "<img src=x onerror=alert(1)>" })
+    expect(email.html.includes("<img")).toBe(false)
+    expect(email.html).toContain("&lt;img")
+  })
+
+  it("refuses data without a code of 6 digits", () => {
+    for (const bad of [undefined, null, {}, { code: "12345" }, { code: "1234567" }, { code: "12345a" }, { code: 123456 }]) {
+      expect(thrown(() => renderEmailVerification(bad as any)) instanceof EmailDataError).toBe(true)
+    }
+  })
+
+  it("rounds the time and never says less than one minute", () => {
+    expect(renderEmailVerification({ code: "123456", expires_in_minutes: 0.2 }).text).toContain("1 minutes")
+    expect(renderEmailVerification({ code: "123456", expires_in_minutes: 10 }).text).toContain("10 minutes")
   })
 })

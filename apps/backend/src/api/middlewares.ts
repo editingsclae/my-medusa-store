@@ -41,6 +41,17 @@ export default defineMiddlewares({
       middlewares: [authenticate('customer', ['session', 'bearer'])],
     },
     {
+      // Confirming the logged-in customer's email with a code
+      method: ['GET', 'POST'],
+      matcher: '/store/merchant/email-verification',
+      middlewares: [authenticate('customer', ['session', 'bearer'])],
+    },
+    {
+      method: ['POST'],
+      matcher: '/store/merchant/email-verification/confirm',
+      middlewares: [authenticate('customer', ['session', 'bearer'])],
+    },
+    {
       method: ['POST'],
       matcher: '/store/search',
       middlewares: [

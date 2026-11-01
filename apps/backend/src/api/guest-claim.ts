@@ -1,11 +1,13 @@
 // Rules for moving a guest's earlier orders to the account the guest registers.
 // No framework imports, so the rules can be unit tested on their own.
 //
-// There is no email verification, so the email alone proves nothing: anybody
-// can register with somebody else's email. An order is only moved when the
-// caller names its id (the storefront remembers the ids of the orders placed
-// in that browser) AND the order belongs to a guest customer with the same
-// email as the logged-in account, in the merchant of the publishable key.
+// Only an account whose email was confirmed with a code can claim orders:
+// before that the email proves nothing, because anybody can register with
+// somebody else's email (the route refuses unconfirmed accounts). The order has
+// to belong to a guest customer with the same email as the logged-in account,
+// in the merchant of the publishable key. A caller may also name the ids of
+// the orders to move (the storefront remembers the ids of the orders placed in
+// that browser); without ids the guest orders of the confirmed email are moved.
 
 export const MAX_CLAIM_IDS = 20
 const MAX_ID_LENGTH = 100
@@ -51,6 +53,20 @@ export function parseOrderIds(input: unknown): string[] | null {
     }
   }
   return ids.length > MAX_CLAIM_IDS ? null : ids
+}
+
+export type ClaimRequest = { mode: "ids"; ids: string[] } | { mode: "email" }
+
+// What a claim request asks for: the listed orders, or (without order_ids) all
+// the guest orders of the confirmed email. Returns null when order_ids is sent
+// but is not a list of 1 to 20 ids.
+export function parseClaimRequest(body: unknown): ClaimRequest | null {
+  const raw = body && typeof body === "object" ? (body as { order_ids?: unknown }) : {}
+  if (raw.order_ids === undefined || raw.order_ids === null) {
+    return { mode: "email" }
+  }
+  const ids = parseOrderIds(raw.order_ids)
+  return ids ? { mode: "ids", ids } : null
 }
 
 export function normalizeEmail(value: unknown): string {

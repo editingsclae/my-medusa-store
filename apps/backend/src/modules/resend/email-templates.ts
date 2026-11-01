@@ -7,6 +7,7 @@
 
 export const EMAIL_TEMPLATES = {
   ORDER_PLACED: "order-placed",
+  EMAIL_VERIFICATION: "email-verification",
 } as const
 
 export type EmailTemplateName = (typeof EMAIL_TEMPLATES)[keyof typeof EMAIL_TEMPLATES]
@@ -342,6 +343,62 @@ ${
   return { subject: oneLine(subject, 200), html, text, fromName: store || null }
 }
 
+// -------------------------------------------------------------
+// Email confirmation code
+// -------------------------------------------------------------
+
+export function renderEmailVerification(data: Record<string, unknown> | null | undefined): RenderedEmail {
+  const code = typeof data?.code === "string" ? data.code : ""
+  if (!/^\d{6}$/.test(code)) {
+    throw new EmailDataError("The email-verification email needs data.code with 6 digits")
+  }
+
+  const store = oneLine(data?.store_name, 60)
+  const minutes = Math.max(1, Math.round(toNumber(data?.expires_in_minutes) || 15))
+  const subject = store
+    ? `${code} is your ${store} confirmation code`
+    : `${code} is your confirmation code`
+  const intro = store
+    ? `Enter this code on ${store} to confirm your email address.`
+    : "Enter this code to confirm your email address."
+  const expiry = `The code works for ${minutes} minutes.`
+  const ignore = store
+    ? `If you did not create an account at ${store}, you can ignore this email.`
+    : "If you did not ask for this code, you can ignore this email."
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:${FONT}">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(intro)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5">
+<tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;border:1px solid #e4e4e7">
+<tr><td style="padding:24px 28px;border-bottom:1px solid #e4e4e7;font-size:18px;font-weight:800;letter-spacing:0.04em;color:#18181b">${escapeHtml(store || "Confirm your email")}</td></tr>
+<tr><td style="padding:28px 28px 8px">
+<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#18181b">Confirm your email</h1>
+<p style="margin:0;font-size:14px;line-height:1.6;color:#3f3f46">${escapeHtml(intro)}</p>
+</td></tr>
+<tr><td align="center" style="padding:20px 28px">
+<div style="display:inline-block;padding:16px 28px;background:#f4f4f5;border-radius:10px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#18181b">${escapeHtml(code)}</div>
+</td></tr>
+<tr><td style="padding:0 28px 8px"><p style="margin:0;font-size:14px;line-height:1.6;color:#3f3f46">${escapeHtml(expiry)}</p></td></tr>
+<tr><td style="padding:12px 28px 28px;font-size:12px;line-height:1.6;color:#a1a1aa">${escapeHtml(ignore)}</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+
+  const text = [store || "Confirm your email", "", intro, "", `Your code: ${code}`, "", expiry, ignore].join("\n")
+
+  return { subject: oneLine(subject, 200), html, text, fromName: store || null }
+}
+
 // The email for a template name, or null when there is no such template
 export function renderEmail(
   template: string,
@@ -350,6 +407,8 @@ export function renderEmail(
   switch (template) {
     case EMAIL_TEMPLATES.ORDER_PLACED:
       return renderOrderPlaced(data)
+    case EMAIL_TEMPLATES.EMAIL_VERIFICATION:
+      return renderEmailVerification(data)
     default:
       return null
   }

@@ -1,6 +1,7 @@
 import {
   MAX_CLAIM_IDS,
   normalizeEmail,
+  parseClaimRequest,
   parseOrderIds,
   planClaim,
 } from "../guest-claim"
@@ -55,6 +56,33 @@ describe("parseOrderIds", () => {
     const ids = Array.from({ length: MAX_CLAIM_IDS }, (_, i) => `order_${i}`)
     expect(parseOrderIds(ids)).toHaveLength(MAX_CLAIM_IDS)
     expect(parseOrderIds([...ids, "order_extra"])).toBe(null)
+  })
+})
+
+describe("parseClaimRequest", () => {
+  it("asks for all the guest orders of the email when no ids are sent", () => {
+    expect(parseClaimRequest({})).toEqual({ mode: "email" })
+    expect(parseClaimRequest(undefined)).toEqual({ mode: "email" })
+    expect(parseClaimRequest(null)).toEqual({ mode: "email" })
+    expect(parseClaimRequest("x")).toEqual({ mode: "email" })
+    expect(parseClaimRequest({ order_ids: null })).toEqual({ mode: "email" })
+  })
+
+  it("asks for the listed orders when ids are sent", () => {
+    expect(parseClaimRequest({ order_ids: [" order_1 ", "order_2", "order_1"] })).toEqual({
+      mode: "ids",
+      ids: ["order_1", "order_2"],
+    })
+  })
+
+  it("refuses ids that are not valid instead of claiming everything", () => {
+    expect(parseClaimRequest({ order_ids: [] })).toBe(null)
+    expect(parseClaimRequest({ order_ids: "order_1" })).toBe(null)
+    expect(parseClaimRequest({ order_ids: [1, 2] })).toBe(null)
+    expect(parseClaimRequest({ order_ids: {} })).toBe(null)
+    expect(
+      parseClaimRequest({ order_ids: Array.from({ length: MAX_CLAIM_IDS + 1 }, (_, i) => `order_${i}`) })
+    ).toBe(null)
   })
 })
 
