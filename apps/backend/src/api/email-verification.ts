@@ -50,10 +50,14 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
-// The state stored in an auth identity's app_metadata. Anything damaged is
-// dropped instead of failing.
-export function readState(appMetadata: unknown): VerificationState {
-  const raw = isObject(appMetadata) ? appMetadata[VERIFICATION_METADATA_KEY] : undefined
+// The state stored in an auth identity's app_metadata under `key` (the email
+// confirmation by default; the password reset keeps its own state under another
+// key with the same rules). Anything damaged is dropped instead of failing.
+export function readState(
+  appMetadata: unknown,
+  key: string = VERIFICATION_METADATA_KEY
+): VerificationState {
+  const raw = isObject(appMetadata) ? appMetadata[key] : undefined
   if (!isObject(raw)) {
     return {}
   }
@@ -98,7 +102,11 @@ export function readState(appMetadata: unknown): VerificationState {
 
 // The app_metadata to save: everything that was there stays (the link to the
 // customer is in it), only the verification key changes.
-export function writeState(appMetadata: unknown, state: VerificationState): Record<string, unknown> {
+export function writeState(
+  appMetadata: unknown,
+  state: VerificationState,
+  key: string = VERIFICATION_METADATA_KEY
+): Record<string, unknown> {
   const current = isObject(appMetadata) ? appMetadata : {}
   const clean: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(state)) {
@@ -106,7 +114,7 @@ export function writeState(appMetadata: unknown, state: VerificationState): Reco
       clean[key] = value
     }
   }
-  return { ...current, [VERIFICATION_METADATA_KEY]: clean }
+  return { ...current, [key]: clean }
 }
 
 export function isVerified(state: VerificationState, email: unknown): boolean {
@@ -132,11 +140,18 @@ export function parseCode(input: unknown): string | null {
   return new RegExp(`^\\d{${CODE_LENGTH}}$`).test(code) ? code : null
 }
 
-// The hash is tied to the identity and the address, so a code cannot be used
-// for another account or another address.
-export function hashCode(secret: string, identityId: string, email: string, code: string): string {
+// The hash is tied to the identity, the address and what the code is for, so a
+// code cannot be used for another account, another address or another purpose
+// (a confirmation code never works as a password reset code).
+export function hashCode(
+  secret: string,
+  identityId: string,
+  email: string,
+  code: string,
+  purpose: string = "email-verification"
+): string {
   return createHmac("sha256", secret)
-    .update(`email-verification|${identityId}|${normalizeEmail(email)}|${code}`)
+    .update(`${purpose}|${identityId}|${normalizeEmail(email)}|${code}`)
     .digest("hex")
 }
 

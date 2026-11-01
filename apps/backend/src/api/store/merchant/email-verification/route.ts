@@ -1,6 +1,5 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
-import type { INotificationModuleService } from "@medusajs/framework/types"
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import {
   CODE_TTL_MS,
   generateCode,
@@ -18,6 +17,7 @@ import {
   verificationSecret,
 } from "../../../email-verification-access"
 import { salesChannelIdsFromKey } from "../../../store-key"
+import { sendCodeEmailWorkflow } from "../../../../workflows/send-code-email"
 
 /**
  * GET /store/merchant/email-verification
@@ -77,20 +77,20 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     // email failed is not made to wait for nothing.
     try {
       const storeName = await loadStoreName(req.scope, channelIds[0])
-      const notifications = req.scope.resolve<INotificationModuleService>(Modules.NOTIFICATION)
-      await notifications.createNotifications({
-        to: email,
-        channel: "email",
-        template: "email-verification",
-        data: {
-          code,
-          store_name: storeName,
-          expires_in_minutes: CODE_TTL_MS / 60000,
+      await sendCodeEmailWorkflow(req.scope).run({
+        input: {
+          to: email,
+          template: "email-verification",
+          data: {
+            code,
+            store_name: storeName,
+            expires_in_minutes: CODE_TTL_MS / 60000,
+          },
+          trigger_type: "email.verification",
+          resource_id: customerId,
+          resource_type: "customer",
+          receiver_id: customerId,
         },
-        trigger_type: "email.verification",
-        resource_id: customerId,
-        resource_type: "customer",
-        receiver_id: customerId,
       })
     } catch (e) {
       const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER)

@@ -8,6 +8,7 @@
 export const EMAIL_TEMPLATES = {
   ORDER_PLACED: "order-placed",
   EMAIL_VERIFICATION: "email-verification",
+  PASSWORD_RESET: "password-reset",
 } as const
 
 export type EmailTemplateName = (typeof EMAIL_TEMPLATES)[keyof typeof EMAIL_TEMPLATES]
@@ -344,27 +345,35 @@ ${
 }
 
 // -------------------------------------------------------------
-// Email confirmation code
+// Emails with a 6 digit code (email confirmation, password reset)
 // -------------------------------------------------------------
 
-export function renderEmailVerification(data: Record<string, unknown> | null | undefined): RenderedEmail {
+type CodeEmailCopy = {
+  // "confirmation code": subject is "<code> is your <store> confirmation code"
+  noun: string
+  heading: string
+  intro: (store: string) => string
+  ignore: (store: string) => string
+}
+
+function renderCodeEmail(
+  data: Record<string, unknown> | null | undefined,
+  template: string,
+  copy: CodeEmailCopy
+): RenderedEmail {
   const code = typeof data?.code === "string" ? data.code : ""
   if (!/^\d{6}$/.test(code)) {
-    throw new EmailDataError("The email-verification email needs data.code with 6 digits")
+    throw new EmailDataError(`The ${template} email needs data.code with 6 digits`)
   }
 
   const store = oneLine(data?.store_name, 60)
   const minutes = Math.max(1, Math.round(toNumber(data?.expires_in_minutes) || 15))
   const subject = store
-    ? `${code} is your ${store} confirmation code`
-    : `${code} is your confirmation code`
-  const intro = store
-    ? `Enter this code on ${store} to confirm your email address.`
-    : "Enter this code to confirm your email address."
+    ? `${code} is your ${store} ${copy.noun}`
+    : `${code} is your ${copy.noun}`
+  const intro = copy.intro(store)
   const expiry = `The code works for ${minutes} minutes.`
-  const ignore = store
-    ? `If you did not create an account at ${store}, you can ignore this email.`
-    : "If you did not ask for this code, you can ignore this email."
+  const ignore = copy.ignore(store)
 
   const html = `<!doctype html>
 <html lang="en">
@@ -378,9 +387,9 @@ export function renderEmailVerification(data: Record<string, unknown> | null | u
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5">
 <tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;border:1px solid #e4e4e7">
-<tr><td style="padding:24px 28px;border-bottom:1px solid #e4e4e7;font-size:18px;font-weight:800;letter-spacing:0.04em;color:#18181b">${escapeHtml(store || "Confirm your email")}</td></tr>
+<tr><td style="padding:24px 28px;border-bottom:1px solid #e4e4e7;font-size:18px;font-weight:800;letter-spacing:0.04em;color:#18181b">${escapeHtml(store || copy.heading)}</td></tr>
 <tr><td style="padding:28px 28px 8px">
-<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#18181b">Confirm your email</h1>
+<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#18181b">${escapeHtml(copy.heading)}</h1>
 <p style="margin:0;font-size:14px;line-height:1.6;color:#3f3f46">${escapeHtml(intro)}</p>
 </td></tr>
 <tr><td align="center" style="padding:20px 28px">
@@ -394,9 +403,37 @@ export function renderEmailVerification(data: Record<string, unknown> | null | u
 </body>
 </html>`
 
-  const text = [store || "Confirm your email", "", intro, "", `Your code: ${code}`, "", expiry, ignore].join("\n")
+  const text = [store || copy.heading, "", intro, "", `Your code: ${code}`, "", expiry, ignore].join("\n")
 
   return { subject: oneLine(subject, 200), html, text, fromName: store || null }
+}
+
+export function renderEmailVerification(data: Record<string, unknown> | null | undefined): RenderedEmail {
+  return renderCodeEmail(data, EMAIL_TEMPLATES.EMAIL_VERIFICATION, {
+    noun: "confirmation code",
+    heading: "Confirm your email",
+    intro: (store) =>
+      store
+        ? `Enter this code on ${store} to confirm your email address.`
+        : "Enter this code to confirm your email address.",
+    ignore: (store) =>
+      store
+        ? `If you did not create an account at ${store}, you can ignore this email.`
+        : "If you did not ask for this code, you can ignore this email.",
+  })
+}
+
+export function renderPasswordReset(data: Record<string, unknown> | null | undefined): RenderedEmail {
+  return renderCodeEmail(data, EMAIL_TEMPLATES.PASSWORD_RESET, {
+    noun: "password reset code",
+    heading: "Reset your password",
+    intro: (store) =>
+      store
+        ? `Enter this code on ${store} to choose a new password.`
+        : "Enter this code to choose a new password.",
+    ignore: () =>
+      "If you did not ask to reset your password, you can ignore this email. Your password stays the same.",
+  })
 }
 
 // The email for a template name, or null when there is no such template
@@ -409,6 +446,8 @@ export function renderEmail(
       return renderOrderPlaced(data)
     case EMAIL_TEMPLATES.EMAIL_VERIFICATION:
       return renderEmailVerification(data)
+    case EMAIL_TEMPLATES.PASSWORD_RESET:
+      return renderPasswordReset(data)
     default:
       return null
   }

@@ -71,6 +71,14 @@ describe("readState / writeState", () => {
     expect(Object.keys(saved[VERIFICATION_METADATA_KEY])).toEqual(["verified_email"])
   })
 
+  it("reads and writes under another key without touching the first", () => {
+    const first = writeState({}, { verified_email: EMAIL })
+    const second: any = writeState(first, { last_sent_at: NOW }, "other_key")
+    expect(readState(second).verified_email).toBe(EMAIL)
+    expect(readState(second, "other_key")).toEqual({ last_sent_at: NOW })
+    expect(readState(second, "missing")).toEqual({})
+  })
+
   it("works with app_metadata that is not an object", () => {
     expect((writeState(null, { verified_email: EMAIL }) as any)[VERIFICATION_METADATA_KEY]).toEqual({
       verified_email: EMAIL,
@@ -183,6 +191,11 @@ describe("hashCode", () => {
 
   it("ignores the case of the address", () => {
     expect(hashOf("123456", "AMIN@example.com")).toBe(hashOf("123456"))
+  })
+
+  it("changes with what the code is for", () => {
+    expect(hashCode(SECRET, IDENTITY, EMAIL, "123456", "password-reset")).not.toBe(hashOf("123456"))
+    expect(hashCode(SECRET, IDENTITY, EMAIL, "123456", "email-verification")).toBe(hashOf("123456"))
   })
 })
 
