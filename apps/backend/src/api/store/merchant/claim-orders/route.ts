@@ -1,5 +1,5 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import {
   MAX_CLAIM_IDS,
   normalizeEmail,
@@ -12,6 +12,8 @@ import {
   requireActor,
 } from "../../../email-verification-access"
 import { salesChannelIdsFromKey } from "../../../store-key"
+import { claimOrdersWorkflow } from "../../../../workflows/claim-orders"
+import { buildClaimUpdates } from "../../../../workflows/claim-orders-logic"
 
 // Guest orders moved in one request when no ids are named
 const MAX_ORDERS_BY_EMAIL = 100
@@ -117,11 +119,9 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     channelIds,
   })
 
-  if (plan.claim.length > 0) {
-    const orderModule = req.scope.resolve(Modules.ORDER)
-    await orderModule.updateOrders(
-      plan.claim.map((id) => ({ id, customer_id: customerId }))
-    )
+  const updates = buildClaimUpdates(plan.claim, orders, customerId)
+  if (updates.length > 0) {
+    await claimOrdersWorkflow(req.scope).run({ input: { updates } })
   }
 
   res.json({ claimed: plan.claim, already_yours: plan.alreadyYours })
