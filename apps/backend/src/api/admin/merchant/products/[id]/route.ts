@@ -1,14 +1,9 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
-import {
-  updateProductsWorkflow,
-  deleteProductsWorkflow,
-  updateProductVariantsWorkflow,
-  createInventoryLevelsWorkflow,
-  updateInventoryLevelsWorkflow,
-  createInventoryItemsWorkflow,
-} from "@medusajs/core-flows"
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
+import { updateProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../utils"
+import { parsePrice, parseStock, partialSaveMessage } from "../../product-inputs"
+import { setVariantStock, updateVariantPrice } from "../../product-stock"
 import {
   assertCategoriesOwned,
   onlyOwnedCategories,
@@ -110,6 +105,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     entity: "product",
     fields: [
       "id",
+      "title",
       "sales_channels.id",
       "variants.id",
       "variants.prices.*",
@@ -134,6 +130,25 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
         "You do not have permission to update this product"
       )
     }
+  }
+
+  // Check the price and stock before anything is saved, so a bad value cannot
+  // leave the product half updated
+  let newPrice: number | null = null
+  if (body.price !== undefined) {
+    const parsed = parsePrice(body.price)
+    if (!parsed.ok) {
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
+    }
+    newPrice = parsed.value
+  }
+  let newStock: number | null = null
+  if (body.inventory_quantity !== undefined) {
+    const parsed = parseStock(body.inventory_quantity)
+    if (!parsed.ok) {
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
+    }
+    newStock = parsed.value
   }
 
   const updateData: any = {}
@@ -167,101 +182,41 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
-  // Update variant price and ensure manage_inventory: true
+  // Update variant price and ensure manage_inventory: true. A failure here is
+  // reported to the merchant: the product details above are already saved.
   if (product.variants?.length) {
-    const variantId = product.variants[0].id
+    const firstVariant = product.variants[0] as any
     const currency = (body.currency_code || context.currencyCode || "usd").toLowerCase()
 
     try {
-      const variantUpdate: any = { id: variantId, manage_inventory: true }
-      if (body.price !== undefined) {
-        variantUpdate.prices = [
-          {
-            amount: Number(body.price),
-            currency_code: currency,
-          },
-        ]
-      }
-      await updateProductVariantsWorkflow(req.scope).run({
-        input: {
-          product_variants: [variantUpdate],
-        },
-      })
+      await updateVariantPrice(
+        req.scope,
+        firstVariant.id,
+        newPrice === null ? null : { amount: newPrice, currencyCode: currency }
+      )
     } catch (variantErr) {
-      console.warn("Failed to update variant:", variantErr)
+      console.error("Failed to update variant:", variantErr)
+      throw new MedusaError(
+        MedusaError.Types.UNEXPECTED_STATE,
+        partialSaveMessage(newPrice === null ? "stock tracking" : "price", variantErr)
+      )
     }
 
-    // Update or create inventory quantity
-    if (body.inventory_quantity !== undefined && context.stockLocationId) {
-      const targetStock = Number(body.inventory_quantity)
+    if (newStock !== null && context.stockLocationId) {
       try {
-        const firstVariant = product.variants[0] as any
-        const invItems = firstVariant.inventory_items || []
-        const primaryItem = invItems[0]
-
-        if (primaryItem && primaryItem.inventory && primaryItem.inventory.id) {
-          const invItemId = primaryItem.inventory.id
-          const levels = primaryItem.inventory.location_levels || []
-          const existingLevel = levels.find((l: any) => l.location_id === context.stockLocationId)
-
-          if (existingLevel) {
-            await updateInventoryLevelsWorkflow(req.scope).run({
-              input: {
-                updates: [
-                  {
-                    id: existingLevel.id,
-                    inventory_item_id: invItemId,
-                    location_id: context.stockLocationId,
-                    stocked_quantity: targetStock,
-                  },
-                ],
-              },
-            })
-          } else {
-            await createInventoryLevelsWorkflow(req.scope).run({
-              input: {
-                inventory_levels: [
-                  {
-                    inventory_item_id: invItemId,
-                    location_id: context.stockLocationId,
-                    stocked_quantity: targetStock,
-                  },
-                ],
-              },
-            })
-          }
-        } else {
-          // If no inventory item exists yet for this variant, create one and link it
-          const { result: createdItems } = await createInventoryItemsWorkflow(req.scope).run({
-            input: {
-              items: [
-                {
-                  title: `${product.title || 'Product'} - Variant`,
-                  location_levels: [
-                    {
-                      location_id: context.stockLocationId,
-                      stocked_quantity: targetStock,
-                    },
-                  ],
-                },
-              ],
-            },
-          })
-
-          if (createdItems?.length) {
-            const link = req.scope.resolve(ContainerRegistrationKeys.LINK)
-            await link.create({
-              [Modules.PRODUCT]: {
-                variant_id: variantId,
-              },
-              [Modules.INVENTORY]: {
-                inventory_item_id: createdItems[0].id,
-              },
-            })
-          }
-        }
+        await setVariantStock(req.scope, {
+          variantId: firstVariant.id,
+          productTitle: product.title as string | undefined,
+          inventoryItems: firstVariant.inventory_items,
+          locationId: context.stockLocationId,
+          quantity: newStock,
+        })
       } catch (stockErr) {
-        console.warn("Failed to update inventory level:", stockErr)
+        console.error("Failed to update inventory level:", stockErr)
+        throw new MedusaError(
+          MedusaError.Types.UNEXPECTED_STATE,
+          partialSaveMessage("stock", stockErr)
+        )
       }
     }
   }

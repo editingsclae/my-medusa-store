@@ -1,7 +1,9 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
-import { createProductsWorkflow, createInventoryLevelsWorkflow } from "@medusajs/core-flows"
+import { createProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../utils"
+import { errorText, parseStock } from "../product-inputs"
+import { setInitialStock } from "../product-stock"
 import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
 import { getDefaultShippingProfileId } from "../fulfillment"
 
@@ -106,7 +108,6 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const body = req.body as any
 
   if (!body.title) {
@@ -129,7 +130,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       ? await assertCategoriesOwned(req.scope, context.salesChannelId, body.category_ids)
       : []
 
-  const initialStock = body.inventory_quantity !== undefined ? Number(body.inventory_quantity) : 10
+  // New products start with 10 in stock unless the merchant says otherwise
+  const stockInput = parseStock(body.inventory_quantity !== undefined ? body.inventory_quantity : 10)
+  if (!stockInput.ok) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, stockInput.message)
+  }
+  const initialStock = stockInput.value
 
   // Format product input for createProductsWorkflow
   const productInput: any = {
@@ -195,44 +201,22 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const createdProduct = result[0]
 
-  // If a stock quantity was specified and a stock location is available, create inventory levels
-  if (context.stockLocationId && initialStock >= 0 && createdProduct?.id) {
+  // Create the first stock levels. If that fails the product is deleted again,
+  // so the merchant is never left with a product that cannot be sold.
+  if (context.stockLocationId && createdProduct?.id) {
     try {
-      // Query created variant's inventory item
-      const { data: freshProducts } = await query.graph({
-        entity: "product",
-        fields: [
-          "id",
-          "variants.id",
-          "variants.inventory_items.inventory.id",
-        ],
-        filters: { id: createdProduct.id },
-      })
-
-      const invLevelsToCreate: { inventory_item_id: string; location_id: string; stocked_quantity: number }[] = []
-      const freshVariants = freshProducts?.[0]?.variants || []
-
-      for (const fv of freshVariants) {
-        for (const item of ((fv as any).inventory_items || [])) {
-          if (item && item.inventory && item.inventory.id) {
-            invLevelsToCreate.push({
-              inventory_item_id: item.inventory.id,
-              location_id: context.stockLocationId,
-              stocked_quantity: initialStock,
-            })
-          }
-        }
-      }
-
-      if (invLevelsToCreate.length > 0) {
-        await createInventoryLevelsWorkflow(req.scope).run({
-          input: {
-            inventory_levels: invLevelsToCreate,
-          },
-        })
-      }
+      await setInitialStock(req.scope, createdProduct.id, context.stockLocationId, initialStock)
     } catch (invErr) {
-      console.warn("Failed to set initial inventory levels:", invErr)
+      console.error("Failed to set initial inventory levels:", invErr)
+      try {
+        await deleteProductsWorkflow(req.scope).run({ input: { ids: [createdProduct.id] } })
+      } catch (cleanupErr) {
+        console.error(`Product ${createdProduct.id} could not be removed after the stock failed:`, cleanupErr)
+      }
+      throw new MedusaError(
+        MedusaError.Types.UNEXPECTED_STATE,
+        `The product could not be created because its stock could not be set: ${errorText(invErr)}. Please try again.`
+      )
     }
   }
 
