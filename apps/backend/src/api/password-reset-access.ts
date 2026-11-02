@@ -1,6 +1,6 @@
 import type { IAuthModuleService, MedusaContainer } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
-import { isResettableIdentity } from "./password-reset"
+import { isResettableFor, type IdentityKind } from "./password-reset"
 
 export type ResettableIdentity = {
   identityId: string
@@ -9,11 +9,13 @@ export type ResettableIdentity = {
   entityId: string
 }
 
-// The shopper identity that belongs to one of the addresses, or null. Merchant
-// (admin) logins and anything without a customer are never returned.
+// The identity of the given kind that belongs to one of the addresses, or null.
+// A shopper reset never returns a merchant (admin) login and a merchant reset
+// never returns a shopper login: they share the email provider.
 export async function findResettableIdentity(
   scope: MedusaContainer,
-  emails: string[]
+  emails: string[],
+  kind: IdentityKind = "shopper"
 ): Promise<ResettableIdentity | null> {
   const auth = scope.resolve<IAuthModuleService>(Modules.AUTH)
 
@@ -28,7 +30,7 @@ export async function findResettableIdentity(
     }
 
     const identity = await auth.retrieveAuthIdentity(providerIdentity.auth_identity_id)
-    if (isResettableIdentity(identity.app_metadata)) {
+    if (isResettableFor(kind, identity.app_metadata)) {
       return { identityId: identity.id, entityId: providerIdentity.entity_id }
     }
   }
@@ -36,7 +38,8 @@ export async function findResettableIdentity(
 }
 
 // Sets a new password with the email provider, which hashes it the same way as at
-// registration. `entityId` is the address as the provider stores it.
+// registration. `entityId` is the address as the provider stores it. Used for
+// shopper and merchant logins alike.
 export async function setShopperPassword(
   scope: MedusaContainer,
   entityId: string,

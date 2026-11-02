@@ -16,6 +16,8 @@ import {
   checkPassword,
   emailCandidates,
   forReset,
+  isMerchantLoginIdentity,
+  isResettableFor,
   isResettableIdentity,
   markVerifiedByReset,
   parseEmail,
@@ -275,5 +277,30 @@ describe("markVerifiedByReset", () => {
     const state = sent()
     markVerifiedByReset(state, EMAIL, NOW)
     expect(state.pending === undefined).toBe(false)
+  })
+})
+
+describe("merchant logins", () => {
+  it("recognises a merchant portal login by its user and no customer", () => {
+    expect(isMerchantLoginIdentity({ user_id: "user_1" })).toBe(true)
+    expect(isMerchantLoginIdentity({ user_id: "user_1", password_reset: {} })).toBe(true)
+  })
+
+  it("refuses shopper logins, empty ids and non objects", () => {
+    expect(isMerchantLoginIdentity({ customer_id: "cus_1" })).toBe(false)
+    expect(isMerchantLoginIdentity({ user_id: "user_1", customer_id: "cus_1" })).toBe(false)
+    expect(isMerchantLoginIdentity({ user_id: "" })).toBe(false)
+    expect(isMerchantLoginIdentity({})).toBe(false)
+    expect(isMerchantLoginIdentity(null)).toBe(false)
+    expect(isMerchantLoginIdentity(["user_1"])).toBe(false)
+  })
+
+  it("keeps the two kinds apart", () => {
+    const shopper = { customer_id: "cus_1" }
+    const merchant = { user_id: "user_1" }
+    expect(isResettableFor("shopper", shopper)).toBe(true)
+    expect(isResettableFor("shopper", merchant)).toBe(false)
+    expect(isResettableFor("merchant", merchant)).toBe(true)
+    expect(isResettableFor("merchant", shopper)).toBe(false)
   })
 })

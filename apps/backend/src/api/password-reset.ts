@@ -77,6 +77,30 @@ export function isResettableIdentity(appMetadata: unknown): boolean {
   return hasCustomer && !hasUser
 }
 
+// The login of a merchant portal user (an admin user): it has a user_id and no
+// customer. Only these may be reset from the merchant portal, and a shopper
+// login must never be.
+export function isMerchantLoginIdentity(appMetadata: unknown): boolean {
+  if (!appMetadata || typeof appMetadata !== "object" || Array.isArray(appMetadata)) {
+    return false
+  }
+  const meta = appMetadata as Record<string, unknown>
+  const userId = meta.user_id
+  const hasUser = typeof userId === "string" && userId !== ""
+  const customerId = meta.customer_id
+  const hasCustomer = customerId !== undefined && customerId !== null && customerId !== ""
+  return hasUser && !hasCustomer
+}
+
+export type IdentityKind = "shopper" | "merchant"
+
+// Which logins a reset may touch
+export function isResettableFor(kind: IdentityKind, appMetadata: unknown): boolean {
+  return kind === "merchant"
+    ? isMerchantLoginIdentity(appMetadata)
+    : isResettableIdentity(appMetadata)
+}
+
 export function resetCodeHash(
   secret: string,
   identityId: string,

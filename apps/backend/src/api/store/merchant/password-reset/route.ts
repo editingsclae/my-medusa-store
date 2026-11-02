@@ -1,74 +1,10 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import type { MedusaContainer } from "@medusajs/framework/types"
-import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
-import {
-  CODE_TTL_MS,
-  RESEND_COOLDOWN_MS,
-  generateCode,
-  planSend,
-} from "../../../email-verification"
-import {
-  loadStateKey,
-  loadStoreName,
-  saveStateKey,
-  verificationLock,
-  verificationSecret,
-} from "../../../email-verification-access"
-import {
-  PASSWORD_RESET_METADATA_KEY,
-  emailCandidates,
-  parseEmail,
-  forReset,
-  resetCodeHash,
-} from "../../../password-reset"
-import { findResettableIdentity } from "../../../password-reset-access"
+import { MedusaError } from "@medusajs/framework/utils"
+import { RESEND_COOLDOWN_MS } from "../../../email-verification"
+import { loadStoreName } from "../../../email-verification-access"
+import { createResetOps } from "../../../password-reset-ops"
+import { requestReset } from "../../../password-reset-flow"
 import { salesChannelIdsFromKey } from "../../../store-key"
-import { sendCodeEmailWorkflow } from "../../../../workflows/send-code-email"
-
-type Target = { identityId: string; entityId: string }
-
-// Emails a code, unless the account asked for one a moment ago or too many times
-// (then nothing is sent and nothing is said). The state is saved only when the
-// email was really sent.
-async function sendResetCode(
-  scope: MedusaContainer,
-  target: Target,
-  storeName: string | null
-): Promise<void> {
-  await verificationLock(target.identityId, async () => {
-    const state = forReset(
-      await loadStateKey(scope, target.identityId, PASSWORD_RESET_METADATA_KEY)
-    )
-    const now = Date.now()
-    const code = generateCode()
-    const plan = planSend(
-      state,
-      target.entityId,
-      now,
-      resetCodeHash(verificationSecret(), target.identityId, target.entityId, code)
-    )
-    if (!plan.ok) {
-      return
-    }
-
-    await sendCodeEmailWorkflow(scope).run({
-      input: {
-        to: target.entityId,
-        template: "password-reset",
-        data: {
-          code,
-          store_name: storeName,
-          expires_in_minutes: CODE_TTL_MS / 60000,
-        },
-        trigger_type: "password.reset",
-        resource_id: target.identityId,
-        resource_type: "auth_identity",
-      },
-    })
-
-    await saveStateKey(scope, target.identityId, PASSWORD_RESET_METADATA_KEY, plan.state)
-  })
-}
 
 /**
  * POST /store/merchant/password-reset   { email }
@@ -82,27 +18,15 @@ async function sendResetCode(
  * email address.
  */
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
-  const email = parseEmail((req.body as { email?: unknown } | undefined)?.email)
-  if (!email) {
-    throw new MedusaError(MedusaError.Types.INVALID_DATA, "Enter a valid email address")
-  }
-
   const channelIds = salesChannelIdsFromKey(req)
-  const scope = req.scope
-  const logger = scope.resolve(ContainerRegistrationKeys.LOGGER)
 
   // Looked up for every request, so the work done does not depend on the answer
-  const storeName = await loadStoreName(scope, channelIds[0])
-  const target = await findResettableIdentity(scope, emailCandidates(email))
+  const storeName = await loadStoreName(req.scope, channelIds[0])
+  const ops = createResetOps(req.scope, { kind: "shopper", storeName })
 
-  if (target) {
-    sendResetCode(scope, target, storeName).catch((e) => {
-      logger.error(
-        `Password reset code for identity ${target.identityId} was not sent: ${
-          e instanceof Error ? e.message : String(e)
-        }`
-      )
-    })
+  const { outcome } = await requestReset(ops, (req.body as { email?: unknown } | undefined)?.email)
+  if (outcome === "invalid_email") {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, "Enter a valid email address")
   }
 
   res.json({ sent: true, can_resend_in: RESEND_COOLDOWN_MS / 1000 })
