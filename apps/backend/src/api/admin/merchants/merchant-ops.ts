@@ -3,7 +3,7 @@
 // around a Medusa workflow or module call.
 
 import type { IAuthModuleService, MedusaContainer } from "@medusajs/framework/types"
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
 import {
   createSalesChannelsWorkflow,
   deleteSalesChannelsWorkflow,
@@ -123,7 +123,10 @@ export function createMerchantOps(scope: MedusaContainer): MerchantOps {
         body: { email, password },
       } as any)
       if (!res.success || !res.authIdentity) {
-        throw new Error(res.error || "the email provider refused the registration")
+        throw new MedusaError(
+          MedusaError.Types.UNEXPECTED_STATE,
+          res.error || "the email provider refused the registration"
+        )
       }
       return res.authIdentity
     },
