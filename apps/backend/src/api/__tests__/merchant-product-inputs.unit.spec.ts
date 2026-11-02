@@ -73,6 +73,23 @@ describe("planStockUpdate", () => {
   })
 })
 
+describe("errorText", () => {
+  it("reads a plain object with a message", () => {
+    expect(errorText({ message: "from a workflow", name: "Error" })).toBe("from a workflow")
+  })
+
+  it("shows the content of an object that has no message", () => {
+    expect(errorText({ code: 42 })).toBe('{"code":42}')
+  })
+
+  it("never returns [object Object]", () => {
+    expect(errorText({})).not.toContain("[object Object]")
+    expect(errorText(undefined)).toBe("undefined")
+    expect(errorText(null)).toBe("null")
+    expect(errorText(7)).toBe("7")
+  })
+})
+
 describe("messages", () => {
   it("reads the text of an error or a plain value", () => {
     expect(errorText(new Error("boom"))).toBe("boom")

@@ -1,6 +1,10 @@
 // Checks and decisions for the price and stock of a product that a merchant
 // saves. No framework imports, so they can be unit tested on their own.
 
+import { errorText } from "../../error-text"
+
+export { errorText }
+
 export type Parsed =
   | { ok: true; value: number }
   | { ok: false; message: string }
@@ -68,9 +72,6 @@ export function planStockUpdate(
   return { kind: "create-level", inventoryItemId }
 }
 
-export function errorText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
-}
 
 // The message a merchant sees when the product itself was saved but a part of
 // it was not. It says what was saved, so they know a second save is safe.

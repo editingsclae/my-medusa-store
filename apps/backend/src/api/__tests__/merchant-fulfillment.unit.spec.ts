@@ -1,5 +1,6 @@
 import {
   buildShippingPrices,
+  fulfillmentNames,
   normalizeCountries,
   parseShippingAmount,
 } from "../admin/merchant/fulfillment"
@@ -80,5 +81,27 @@ describe("buildShippingPrices", () => {
     expect(buildShippingPrices(3, "tnd", [{ id: "r", currency_code: null }])).toEqual([
       { currency_code: "tnd", amount: 3 },
     ])
+  })
+})
+
+describe("fulfillmentNames", () => {
+  it("keeps two merchants with the same name apart", () => {
+    const a = fulfillmentNames("Zara", "sloc_01M6EXPRX8SS9NGT3VEDW1B6R7")
+    const b = fulfillmentNames("Zara", "sloc_01M6EXPRY5CS0XNM8YQFXKF0AF")
+    expect(a.setName === b.setName).toBe(false)
+    expect(a.zoneName === b.zoneName).toBe(false)
+  })
+
+  it("gives the same names for the same location", () => {
+    expect(fulfillmentNames("Zara", "sloc_01ABCDEFGH")).toEqual(
+      fulfillmentNames("Zara", "sloc_01ABCDEFGH")
+    )
+  })
+
+  it("keeps the merchant name in the set and the zone", () => {
+    const names = fulfillmentNames("Zara", "sloc_01ABCDEFGH")
+    expect(names.setName).toContain("Zara delivery")
+    expect(names.zoneName).toContain("Zara delivery zone")
+    expect(names.setName === names.zoneName).toBe(false)
   })
 })

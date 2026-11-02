@@ -54,6 +54,22 @@ export function parseShippingAmount(input: unknown): number | null {
   return amount
 }
 
+/**
+ * Names for a merchant's fulfillment set and service zone. Medusa requires both
+ * to be unique, so two merchants with the same name would collide (the second
+ * would get no delivery setup). The end of the stock location id keeps them apart.
+ */
+export function fulfillmentNames(
+  merchantName: string,
+  stockLocationId: string
+): { setName: string; zoneName: string } {
+  const suffix = stockLocationId.slice(-8)
+  return {
+    setName: `${merchantName} delivery (${suffix})`,
+    zoneName: `${merchantName} delivery zone (${suffix})`,
+  }
+}
+
 type PriceRow = { currency_code: string } | { region_id: string }
 
 /**
@@ -162,12 +178,13 @@ export async function provisionMerchantFulfillment(
     })
   }
 
+  const names = fulfillmentNames(options.merchantName, options.stockLocationId)
   const fulfillmentSet = await fulfillment.createFulfillmentSets({
-    name: `${options.merchantName} delivery`,
+    name: names.setName,
     type: "shipping",
     service_zones: [
       {
-        name: `${options.merchantName} delivery zone`,
+        name: names.zoneName,
         geo_zones: options.countries.map((country_code) => ({
           country_code,
           type: "country" as const,

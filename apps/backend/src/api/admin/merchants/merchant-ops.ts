@@ -12,6 +12,7 @@ import {
   linkSalesChannelsToStockLocationWorkflow,
   createApiKeysWorkflow,
   deleteApiKeysWorkflow,
+  revokeApiKeysWorkflow,
   linkSalesChannelsToApiKeyWorkflow,
   createUsersWorkflow,
   deleteUsersWorkflow,
@@ -104,8 +105,12 @@ export function createMerchantOps(scope: MedusaContainer): MerchantOps {
         input: { id: keyId, add: [channelId] },
       })
     },
-    deleteKey(id) {
-      return deleteApiKeysWorkflow(scope).run({ input: { ids: [id] } })
+    // Medusa refuses to delete a key that has not been revoked, so revoke first
+    async deleteKey(id) {
+      await revokeApiKeysWorkflow(scope).run({
+        input: { selector: { id }, revoke: { revoked_by: "merchant-creation-rollback" } },
+      })
+      await deleteApiKeysWorkflow(scope).run({ input: { ids: [id] } })
     },
 
     async createUser(data) {

@@ -14,6 +14,7 @@
 //    kept and the problem is reported, because it can be repeated later with the
 //    backfill script
 
+import { errorText } from "../../error-text"
 import { createUndoStack, type UndoFailure } from "./undo-stack"
 
 export type MerchantInput = {
@@ -99,10 +100,6 @@ export class MerchantSetupError extends Error {
   }
 }
 
-function describe(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
-}
-
 export async function createMerchantSteps(
   ops: MerchantOps,
   input: MerchantInput
@@ -145,7 +142,7 @@ export async function createMerchantSteps(
         shippingAmount: input.shippingAmount,
       })
     } catch (err) {
-      fulfillmentError = describe(err)
+      fulfillmentError = errorText(err)
       ops.report(`Could not set up merchant fulfillment: ${fulfillmentError}`)
     }
     if (fulfillment?.created) {
@@ -182,7 +179,7 @@ export async function createMerchantSteps(
       } catch (err) {
         throw new MerchantSetupError(
           "login",
-          `The login for ${input.email} could not be created: ${describe(err)}`
+          `The login for ${input.email} could not be created: ${errorText(err)}`
         )
       }
       undo.add(`login ${login.id}`, () => ops.deleteLogin(login.id))
@@ -192,7 +189,7 @@ export async function createMerchantSteps(
       } catch (err) {
         throw new MerchantSetupError(
           "login",
-          `The login for ${input.email} could not be linked to the merchant: ${describe(err)}`
+          `The login for ${input.email} could not be linked to the merchant: ${errorText(err)}`
         )
       }
     }
@@ -202,7 +199,7 @@ export async function createMerchantSteps(
     const left: UndoFailure[] = await undo.rollback()
     if (left.length > 0) {
       ops.report(
-        `Merchant "${input.name}" could not be created (${describe(err)}) and the clean up was not complete. ` +
+        `Merchant "${input.name}" could not be created (${errorText(err)}) and the clean up was not complete. ` +
           `Left behind, delete by hand: ${left.map((l) => `${l.label} (${l.error})`).join("; ")}`
       )
     }

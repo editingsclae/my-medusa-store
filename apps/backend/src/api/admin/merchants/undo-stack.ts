@@ -2,6 +2,8 @@
 // steps fails half way: every step that worked adds how to take it back.
 // No framework imports, so it can be unit tested on its own.
 
+import { errorText } from "../../error-text"
+
 export type UndoFailure = {
   label: string
   error: string
@@ -31,7 +33,7 @@ export function createUndoStack() {
         } catch (err) {
           failed.push({
             label: entry.label,
-            error: err instanceof Error ? err.message : String(err),
+            error: errorText(err),
           })
         }
       }

@@ -36,6 +36,17 @@ describe("createUndoStack", () => {
     expect(failed).toEqual([{ label: "broken", error: "db down" }])
   })
 
+  it("reads the message of a thrown plain object instead of [object Object]", async () => {
+    const stack = createUndoStack()
+    stack.add("key", async () => {
+      throw { message: "Cannot delete api keys that are not revoked", name: "Error" }
+    })
+    const failed = await stack.rollback()
+    expect(failed).toEqual([
+      { label: "key", error: "Cannot delete api keys that are not revoked" },
+    ])
+  })
+
   it("does nothing a second time", async () => {
     const order: string[] = []
     const stack = createUndoStack()
