@@ -12,8 +12,8 @@ import {
   type ClaimUpdate,
 } from "./claim-orders-logic"
 
-export const claimOrdersStep = createStep(
-  "claim-orders-step",
+export const moveGuestOrdersStep = createStep(
+  "move-guest-orders",
   async (updates: ClaimUpdate[], { container }) => {
     const moved = await applyClaim(container.resolve(Modules.ORDER), updates)
     return new StepResponse(moved, updates)
@@ -37,7 +37,7 @@ export const claimOrdersWorkflow = createWorkflow(
   "claim-orders",
   (input: ClaimOrdersInput) => {
     const updates = transform({ input }, ({ input }) => input.updates)
-    const moved = claimOrdersStep(updates)
+    const moved = moveGuestOrdersStep(updates)
     return new WorkflowResponse(moved)
   }
 )
