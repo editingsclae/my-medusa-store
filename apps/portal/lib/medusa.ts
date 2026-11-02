@@ -291,6 +291,44 @@ export async function loginMerchant(email: string, password: string): Promise<{ 
   }
 }
 
+// Password reset. Public routes (no token): the backend emails a 6 digit code to
+// a merchant login and the code is sent back with the new password. The answer
+// to a request is the same whether or not the email has an account.
+async function publicPost<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${BACKEND_URL}${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    let errorMsg = `API Error ${res.status}`
+    try {
+      const errJson = await res.json()
+      errorMsg = errJson.message || errJson.error || errorMsg
+    } catch {
+      // ignore
+    }
+    throw new Error(errorMsg)
+  }
+
+  return res.json() as Promise<T>
+}
+
+export async function requestMerchantPasswordReset(
+  email: string
+): Promise<{ sent: boolean; can_resend_in: number }> {
+  return publicPost("/auth/merchant-password-reset", { email })
+}
+
+export async function confirmMerchantPasswordReset(input: {
+  email: string
+  code: string
+  password: string
+}): Promise<{ reset: boolean; email: string }> {
+  return publicPost("/auth/merchant-password-reset-confirm", input)
+}
+
 export async function getMerchantMe(): Promise<MerchantProfile> {
   return toMerchantProfile(await apiFetch<MerchantMeResponse>("/admin/merchant/me"))
 }
