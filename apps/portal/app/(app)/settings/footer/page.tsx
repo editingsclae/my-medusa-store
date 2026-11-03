@@ -3,21 +3,44 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   getFooterSettings,
+  getMerchantCategories,
   getMerchantMe,
   saveFooterSettings,
   FooterContent,
   FooterLimits,
   FooterNetwork,
+  FooterPageKey,
+  MerchantCategory,
 } from '@/lib/medusa';
 import {
   DEFAULT_LIMITS,
   NETWORKS,
   NETWORK_NAMES,
   NETWORK_PLACEHOLDERS,
+  PAGE_HINTS,
+  PAGE_KEYS,
+  PAGE_TITLES,
+  addShopCategory,
   emptyFooter,
+  moveShopCategory,
+  removeShopCategory,
   validateFooter,
   visibleNetworks,
+  visiblePages,
 } from '@/lib/footer';
+
+// What the server sends, with every part present even if the server is older
+// than this page.
+function completeFooter(footer: Partial<FooterContent> | undefined): FooterContent {
+  const base = emptyFooter();
+  return {
+    ...base,
+    ...footer,
+    social: { ...base.social, ...(footer?.social ?? {}) },
+    shop_category_ids: Array.isArray(footer?.shop_category_ids) ? footer.shop_category_ids : [],
+    pages: { ...base.pages, ...(footer?.pages ?? {}) },
+  };
+}
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -92,6 +115,9 @@ export default function FooterSettingsPage() {
   const [footer, setFooter] = useState<FooterContent>(emptyFooter());
   const [savedJson, setSavedJson] = useState('');
   const [limits, setLimits] = useState<FooterLimits>(DEFAULT_LIMITS);
+  // null while not loaded, or when it could not be loaded
+  const [categories, setCategories] = useState<MerchantCategory[] | null>(null);
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -102,9 +128,20 @@ export default function FooterSettingsPage() {
     try {
       setLoadError(null);
       const res = await getFooterSettings();
-      setFooter(res.footer);
-      setSavedJson(JSON.stringify(res.footer));
+      const loaded = completeFooter(res.footer);
+      setFooter(loaded);
+      setSavedJson(JSON.stringify(loaded));
       setLimits({ ...DEFAULT_LIMITS, ...res.limits });
+      // The footer page works without the list; only the Shop column needs it
+      getMerchantCategories()
+        .then((list) => {
+          setCategories(list.categories);
+          setCategoriesFailed(false);
+        })
+        .catch(() => {
+          setCategories(null);
+          setCategoriesFailed(true);
+        });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load your footer.');
     } finally {
@@ -140,17 +177,28 @@ export default function FooterSettingsPage() {
     });
   };
 
+  const setShopCategories = (ids: string[]) => {
+    setMessage(null);
+    setFooter((prev) => ({ ...prev, shop_category_ids: ids }));
+  };
+
+  const setPage = (key: FooterPageKey, value: string) => {
+    setMessage(null);
+    setFooter((prev) => ({ ...prev, pages: { ...prev.pages, [key]: value } }));
+  };
+
   const handleSave = async () => {
-    const problem = validateFooter(footer, limits);
+    const problem = validateFooter(footer, limits, categories);
     if (problem) return setMessage({ kind: 'error', text: problem });
 
     setSaving(true);
     setMessage(null);
     try {
       const res = await saveFooterSettings(footer);
-      // The server cleans the links (an @name becomes the full address)
-      setFooter(res.footer);
-      setSavedJson(JSON.stringify(res.footer));
+      // The server cleans the links (an @name becomes the full address) and the text
+      const saved = completeFooter(res.footer);
+      setFooter(saved);
+      setSavedJson(JSON.stringify(saved));
       setMessage({ kind: 'ok', text: 'Saved. Your store shows the new footer right away.' });
     } catch (err) {
       setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save.' });
@@ -192,6 +240,14 @@ export default function FooterSettingsPage() {
   }
 
   const shown = visibleNetworks(footer);
+  const shownPages = visiblePages(footer);
+  const categoryOf = (id: string): MerchantCategory | undefined => categories?.find((c) => c.id === id);
+  const shopColumn: Array<{ id: string; category: MerchantCategory | undefined }> =
+    footer.shop_category_ids.map((id: string) => ({ id, category: categoryOf(id) }));
+  const addable = (categories ?? []).filter(
+    (c) => c.is_active !== false && !footer.shop_category_ids.includes(c.id)
+  );
+  const columnFull = footer.shop_category_ids.length >= limits.shop_categories;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -323,6 +379,142 @@ export default function FooterSettingsPage() {
         </ul>
       </section>
 
+      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-shop-heading">
+        <h2 id="footer-shop-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
+          Shop column
+        </h2>
+        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
+          Up to {limits.shop_categories} of your categories, listed under &quot;Shop&quot; in your footer, in this order.
+        </p>
+
+        {categoriesFailed && (
+          <p role="alert" style={{ margin: '12px 0 0', fontSize: '14px', color: '#B42318' }}>
+            Your categories could not be loaded, so you cannot change this list now. Reload the page to try again.
+          </p>
+        )}
+
+        {shopColumn.length === 0 ? (
+          <p style={{ margin: '16px 0 0', fontSize: '14px', color: '#6B7280' }}>
+            No category chosen. The Shop column is not shown.
+          </p>
+        ) : (
+          <ol data-testid="shop-column" style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px' }}>
+            {shopColumn.map(({ id, category }, index) => (
+              <li
+                key={id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  border: '1px solid #E6E8EC',
+                  borderRadius: '18px',
+                  padding: '10px 14px',
+                  background: category && category.is_active !== false ? '#FFFFFF' : '#F7F8FA',
+                }}
+              >
+                <span style={{ flex: '1 1 160px', minWidth: 0, fontSize: '15px', fontWeight: 500 }}>
+                  {category ? category.name : categories ? 'This category no longer exists' : 'Category'}
+                  {category && category.is_active === false && (
+                    <span style={{ marginLeft: '8px', fontSize: '12px', color: '#B54708' }}>
+                      switched off, not shown to shoppers
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  style={smallButton}
+                  disabled={index === 0}
+                  onClick={() => setShopCategories(moveShopCategory(footer.shop_category_ids, id, -1))}
+                  aria-label={`Move ${category ? category.name : 'category'} up`}
+                >
+                  Up
+                </button>
+                <button
+                  type="button"
+                  style={smallButton}
+                  disabled={index === shopColumn.length - 1}
+                  onClick={() => setShopCategories(moveShopCategory(footer.shop_category_ids, id, 1))}
+                  aria-label={`Move ${category ? category.name : 'category'} down`}
+                >
+                  Down
+                </button>
+                <button
+                  type="button"
+                  style={smallButton}
+                  onClick={() => setShopCategories(removeShopCategory(footer.shop_category_ids, id))}
+                  aria-label={`Remove ${category ? category.name : 'category'}`}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        <label style={{ ...labelStyle, marginTop: '16px' }}>
+          Add a category
+          <select
+            value=""
+            disabled={columnFull || addable.length === 0 || categories === null}
+            onChange={(e) =>
+              setShopCategories(addShopCategory(footer.shop_category_ids, e.target.value, limits.shop_categories))
+            }
+            style={inputStyle}
+          >
+            <option value="">
+              {columnFull
+                ? `The column is full (${limits.shop_categories} categories)`
+                : addable.length === 0
+                  ? 'No other category to add'
+                  : 'Choose a category'}
+            </option>
+            {addable.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-pages-heading">
+        <h2 id="footer-pages-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
+          Support pages
+        </h2>
+        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
+          Write the text of each page. A blank line starts a new paragraph. A page with no text is left out of your
+          footer.
+        </p>
+        <div style={{ display: 'grid', gap: '18px', marginTop: '16px' }}>
+          {PAGE_KEYS.map((key) => (
+            <label key={key} style={labelStyle}>
+              {PAGE_TITLES[key]}
+              <span style={{ fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>{PAGE_HINTS[key]}</span>
+              <textarea
+                value={footer.pages[key]}
+                onChange={(e) => setPage(key, e.target.value)}
+                rows={6}
+                aria-label={`${PAGE_TITLES[key]} text`}
+                placeholder="Leave empty to hide this page"
+                style={{
+                  ...inputStyle,
+                  height: 'auto',
+                  minHeight: '132px',
+                  padding: '12px 17px',
+                  borderRadius: '18px',
+                  resize: 'vertical',
+                  lineHeight: '24px',
+                }}
+              />
+              <span style={counterStyle}>
+                {footer.pages[key].length} / {limits.page}
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
+
       <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-preview-heading">
         <h2 id="footer-preview-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
           Preview
@@ -348,6 +540,32 @@ export default function FooterSettingsPage() {
                 </span>
               ))}
             </p>
+          )}
+          {(shopColumn.length > 0 || shownPages.length > 0) && (
+            <div style={{ margin: '16px 0 0', display: 'flex', gap: '40px', flexWrap: 'wrap', fontSize: '13px' }}>
+              {shopColumn.length > 0 && (
+                <div data-testid="preview-shop">
+                  <p style={{ margin: 0, fontWeight: 700 }}>Shop</p>
+                  <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '4px', color: '#4B5263' }}>
+                    {shopColumn.map(({ id, category }) => (
+                      <li key={id}>{category ? category.name : '…'}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {shownPages.length > 0 && (
+                <div data-testid="preview-support">
+                  <p style={{ margin: 0, fontWeight: 700 }}>Support</p>
+                  <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '4px', color: '#4B5263' }}>
+                    {shownPages.map((key) => (
+                      <li key={key} data-page={key}>
+                        {PAGE_TITLES[key]}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </section>

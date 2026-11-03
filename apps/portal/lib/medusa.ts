@@ -729,7 +729,8 @@ export async function saveStorefrontContent(content: StorefrontContent): Promise
   })
 }
 
-// Footer of the storefront (merchant): store name, description and social links
+// Footer of the storefront (merchant): store name, description, social links,
+// the Shop column and the support pages
 export type FooterNetwork = "tiktok" | "facebook" | "instagram"
 
 export interface FooterSocialLink {
@@ -737,10 +738,16 @@ export interface FooterSocialLink {
   enabled: boolean
 }
 
+export type FooterPageKey = "contact" | "shipping" | "returns" | "privacy" | "terms"
+
 export interface FooterContent {
   store_name: string
   description: string
   social: Record<FooterNetwork, FooterSocialLink>
+  // Up to `limits.shop_categories` category ids, in the order they are shown
+  shop_category_ids: string[]
+  // Plain text of each support page; empty means the page is not offered
+  pages: Record<FooterPageKey, string>
 }
 
 export interface FooterLimits {
@@ -748,6 +755,9 @@ export interface FooterLimits {
   description: number
   social_url: number
   networks: FooterNetwork[]
+  shop_categories: number
+  page: number
+  pages: Array<{ key: FooterPageKey; title: string }>
 }
 
 export interface FooterResponse {
