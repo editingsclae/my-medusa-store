@@ -729,6 +729,43 @@ export async function saveStorefrontContent(content: StorefrontContent): Promise
   })
 }
 
+// Footer of the storefront (merchant): store name, description and social links
+export type FooterNetwork = "tiktok" | "facebook" | "instagram"
+
+export interface FooterSocialLink {
+  url: string
+  enabled: boolean
+}
+
+export interface FooterContent {
+  store_name: string
+  description: string
+  social: Record<FooterNetwork, FooterSocialLink>
+}
+
+export interface FooterLimits {
+  store_name: number
+  description: number
+  social_url: number
+  networks: FooterNetwork[]
+}
+
+export interface FooterResponse {
+  footer: FooterContent
+  limits: FooterLimits
+}
+
+export async function getFooterSettings(): Promise<FooterResponse> {
+  return apiFetch<FooterResponse>("/admin/merchant/footer")
+}
+
+export async function saveFooterSettings(footer: FooterContent): Promise<FooterResponse> {
+  return apiFetch<FooterResponse>("/admin/merchant/footer", {
+    method: "POST",
+    body: JSON.stringify(footer),
+  })
+}
+
 export async function getPlatformMerchants(): Promise<{ merchants: PlatformMerchant[] }> {
   return apiFetch<{ merchants: PlatformMerchant[] }>("/admin/merchants")
 }
