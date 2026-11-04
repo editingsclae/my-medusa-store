@@ -765,6 +765,41 @@ export interface FooterResponse {
   limits: FooterLimits
 }
 
+// A support page's text as the server will hand it to storefronts. The server
+// removes everything unsafe, so these are safe to draw.
+export interface RichText {
+  text: string
+  bold?: boolean
+  italic?: boolean
+}
+export interface RichLink {
+  type: "link"
+  href: string
+  children: RichText[]
+}
+export type RichInline = ({ type: "text" } & RichText) | { type: "break" } | RichLink
+export interface RichListItem {
+  content: RichInline[]
+  children: RichListBlock[]
+}
+export interface RichListBlock {
+  type: "list"
+  ordered: boolean
+  items: RichListItem[]
+}
+export type RichBlock =
+  | { type: "heading"; level: 1 | 2 | 3; content: RichInline[] }
+  | { type: "paragraph"; content: RichInline[] }
+  | RichListBlock
+  | { type: "rule" }
+
+export async function previewFooterPage(text: string): Promise<{ blocks: RichBlock[] }> {
+  return apiFetch<{ blocks: RichBlock[] }>("/admin/merchant/footer/preview", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  })
+}
+
 export async function getFooterSettings(): Promise<FooterResponse> {
   return apiFetch<FooterResponse>("/admin/merchant/footer")
 }

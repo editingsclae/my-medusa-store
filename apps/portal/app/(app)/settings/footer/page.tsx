@@ -5,13 +5,17 @@ import {
   getFooterSettings,
   getMerchantCategories,
   getMerchantMe,
+  previewFooterPage,
   saveFooterSettings,
   FooterContent,
   FooterLimits,
   FooterNetwork,
   FooterPageKey,
   MerchantCategory,
+  RichBlock,
 } from '@/lib/medusa';
+import { htmlToMarkdown, replaceRange } from '@/lib/rich-text';
+import { RichBlocks } from '@/components/settings/RichBlocks';
 import {
   DEFAULT_LIMITS,
   NETWORKS,
@@ -108,6 +112,73 @@ const counterStyle: React.CSSProperties = {
   color: '#6B7280',
 };
 
+// How a page will look to shoppers. The server draws it from the same text, so
+// this is exactly what the storefront will show.
+function PagePreview({ text }: { text: string }) {
+  // The answer is kept with the text it was made for. While the text that is
+  // shown has no answer yet, the preview is loading; nothing is set in the effect
+  // itself, only when the server answers.
+  const [answer, setAnswer] = useState<
+    { text: string; blocks: RichBlock[]; message?: undefined } | { text: string; message: string; blocks?: undefined } | null
+  >(null);
+
+  useEffect(() => {
+    if (text.trim() === '') return;
+    let cancelled = false;
+    previewFooterPage(text)
+      .then((res) => {
+        if (!cancelled) setAnswer({ text, blocks: res.blocks });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setAnswer({ text, message: err instanceof Error ? err.message : 'Could not load the preview.' });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [text]);
+
+  const current = answer && answer.text === text ? answer : null;
+
+  const box: React.CSSProperties = {
+    border: '1px solid #E6E8EC',
+    borderRadius: '18px',
+    background: '#FFFFFF',
+    padding: '18px 20px',
+    minHeight: '132px',
+    maxHeight: '480px',
+    overflow: 'auto',
+  };
+
+  if (text.trim() === '') {
+    return (
+      <div style={{ ...box, color: '#6B7280', fontSize: '14px' }} data-testid="page-preview">
+        Nothing to preview. A page with no text is left out of your footer.
+      </div>
+    );
+  }
+  if (!current) {
+    return (
+      <div style={{ ...box, color: '#6B7280', fontSize: '14px' }} data-testid="page-preview">
+        Loading the preview...
+      </div>
+    );
+  }
+  if (current.blocks === undefined) {
+    return (
+      <div role="alert" style={{ ...box, color: '#B42318', fontSize: '14px' }} data-testid="page-preview">
+        {current.message}
+      </div>
+    );
+  }
+  return (
+    <div style={box} data-testid="page-preview">
+      <RichBlocks blocks={current.blocks} />
+    </div>
+  );
+}
+
 export default function FooterSettingsPage() {
   const [checking, setChecking] = useState(true);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
@@ -118,6 +189,10 @@ export default function FooterSettingsPage() {
   // null while not loaded, or when it could not be loaded
   const [categories, setCategories] = useState<MerchantCategory[] | null>(null);
   const [categoriesFailed, setCategoriesFailed] = useState(false);
+  // Which pages show their preview instead of the text box, and which one just
+  // got pasted text with formatting
+  const [previewing, setPreviewing] = useState<Partial<Record<FooterPageKey, boolean>>>({});
+  const [pasted, setPasted] = useState<Partial<Record<FooterPageKey, boolean>>>({});
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -184,7 +259,26 @@ export default function FooterSettingsPage() {
 
   const setPage = (key: FooterPageKey, value: string) => {
     setMessage(null);
+    setPasted((prev) => (prev[key] ? { ...prev, [key]: false } : prev));
     setFooter((prev) => ({ ...prev, pages: { ...prev.pages, [key]: value } }));
+  };
+
+  // Text copied from an AI assistant arrives as HTML. Its headings, bold text,
+  // lists and links are turned into the page's simple formatting, so they keep
+  // their look. A paste that is only plain text is left to the browser.
+  const handlePagePaste = (key: FooterPageKey, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const html = e.clipboardData.getData('text/html');
+    if (!html) return;
+    const markdown = htmlToMarkdown(html);
+    if (markdown === null) return;
+
+    e.preventDefault();
+    const box = e.currentTarget;
+    const next = replaceRange(footer.pages[key], box.selectionStart, box.selectionEnd, markdown);
+    setMessage(null);
+    setFooter((prev) => ({ ...prev, pages: { ...prev.pages, [key]: next.value } }));
+    setPasted((prev) => ({ ...prev, [key]: true }));
+    requestAnimationFrame(() => box.setSelectionRange(next.caret, next.caret));
   };
 
   const handleSave = async () => {
@@ -483,34 +577,87 @@ export default function FooterSettingsPage() {
           Support pages
         </h2>
         <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
-          Write the text of each page. A blank line starts a new paragraph. A page with no text is left out of your
-          footer.
+          Write the text of each page. A page with no text is left out of your footer.
         </p>
-        <div style={{ display: 'grid', gap: '18px', marginTop: '16px' }}>
+        <div
+          data-testid="formatting-tip"
+          style={{
+            margin: '12px 0 0',
+            padding: '12px 16px',
+            borderRadius: '14px',
+            background: '#F7F8FA',
+            border: '1px solid #E6E8EC',
+            fontSize: '13px',
+            lineHeight: '20px',
+            color: '#4B5263',
+          }}
+        >
+          <strong style={{ color: '#1F2937' }}>Tip:</strong> you can paste text written by an AI assistant. Titles, bold
+          text, lists and links keep their look. You can also type them yourself: <code># Title</code>,{' '}
+          <code>## Section</code>, <code>**bold**</code>, <code>- item</code> (indent a line for a sub-item),{' '}
+          <code>1. item</code>, <code>[text](https://...)</code>. A blank line starts a new paragraph. Use{' '}
+          <em>Preview</em> to see the result.
+        </div>
+        <div style={{ display: 'grid', gap: '22px', marginTop: '16px' }}>
           {PAGE_KEYS.map((key) => (
-            <label key={key} style={labelStyle}>
-              {PAGE_TITLES[key]}
+            <div key={key} style={labelStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ flex: '1 1 auto' }}>{PAGE_TITLES[key]}</span>
+                <span role="group" aria-label={`${PAGE_TITLES[key]} view`} style={{ display: 'flex', gap: '6px' }}>
+                  {(['Edit', 'Preview'] as const).map((mode) => {
+                    const active = (mode === 'Preview') === Boolean(previewing[key]);
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={active}
+                        aria-label={`${mode} ${PAGE_TITLES[key]}`}
+                        onClick={() => setPreviewing((prev) => ({ ...prev, [key]: mode === 'Preview' }))}
+                        style={{
+                          ...smallButton,
+                          background: active ? 'var(--accent)' : '#FFFFFF',
+                          color: active ? '#FFFFFF' : '#374151',
+                          borderColor: active ? 'var(--accent)' : '#D1D5DB',
+                        }}
+                      >
+                        {mode}
+                      </button>
+                    );
+                  })}
+                </span>
+              </div>
               <span style={{ fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>{PAGE_HINTS[key]}</span>
-              <textarea
-                value={footer.pages[key]}
-                onChange={(e) => setPage(key, e.target.value)}
-                rows={6}
-                aria-label={`${PAGE_TITLES[key]} text`}
-                placeholder="Leave empty to hide this page"
-                style={{
-                  ...inputStyle,
-                  height: 'auto',
-                  minHeight: '132px',
-                  padding: '12px 17px',
-                  borderRadius: '18px',
-                  resize: 'vertical',
-                  lineHeight: '24px',
-                }}
-              />
+              {previewing[key] ? (
+                <PagePreview text={footer.pages[key]} />
+              ) : (
+                <textarea
+                  value={footer.pages[key]}
+                  onChange={(e) => setPage(key, e.target.value)}
+                  onPaste={(e) => handlePagePaste(key, e)}
+                  rows={8}
+                  aria-label={`${PAGE_TITLES[key]} text`}
+                  placeholder="Leave empty to hide this page"
+                  style={{
+                    ...inputStyle,
+                    height: 'auto',
+                    minHeight: '160px',
+                    padding: '12px 17px',
+                    borderRadius: '18px',
+                    resize: 'vertical',
+                    lineHeight: '24px',
+                    fontFamily: 'inherit',
+                  }}
+                />
+              )}
+              {pasted[key] && !previewing[key] && (
+                <span data-testid={`pasted-${key}`} role="status" style={{ fontSize: '12px', color: '#17803F' }}>
+                  Your formatting was kept: titles, bold text, lists and links.
+                </span>
+              )}
               <span style={counterStyle}>
                 {footer.pages[key].length} / {limits.page}
               </span>
-            </label>
+            </div>
           ))}
         </div>
       </section>

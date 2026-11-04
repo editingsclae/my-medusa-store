@@ -41,7 +41,7 @@ export const DEFAULT_LIMITS: FooterLimits = {
   social_url: 300,
   networks: NETWORKS,
   shop_categories: 5,
-  page: 10000,
+  page: 20000,
   pages: PAGE_KEYS.map((key) => ({ key, title: PAGE_TITLES[key] })),
 };
 
