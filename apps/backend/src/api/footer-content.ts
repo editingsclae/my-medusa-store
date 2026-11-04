@@ -5,12 +5,15 @@
 //
 // It also holds the "Shop" column of the footer (up to 5 of the merchant's
 // categories, in the merchant's order) and the text of five support pages
-// (contact, shipping, returns, privacy, terms), plain text with paragraphs.
+// (contact, shipping, returns, privacy, terms). A page is text with a little
+// Markdown (headings, bold, lists, links), see rich-text.ts.
 // A support page with no text is not offered to shoppers.
 //
 // A social link is never a free URL: it has to be on the network's own site, so
 // a footer cannot send shoppers to another site. A merchant may also type just
 // "@name".
+
+import { parseRichText, type Block } from "./rich-text"
 
 export const FOOTER_METADATA_KEY = "footer"
 
@@ -27,7 +30,7 @@ export const MAX_STORE_NAME_LENGTH = 60
 export const MAX_DESCRIPTION_LENGTH = 200
 export const MAX_SOCIAL_URL_LENGTH = 300
 export const MAX_SHOP_CATEGORIES = 5
-export const MAX_PAGE_LENGTH = 10000
+export const MAX_PAGE_LENGTH = 20000
 
 export const PAGE_KEYS = ["contact", "shipping", "returns", "privacy", "terms"] as const
 export type PageKey = (typeof PAGE_KEYS)[number]
@@ -89,7 +92,9 @@ export type PublicFooter = {
   pages: Array<{ slug: PageKey; title: string }>
 }
 
-export type PublicPage = { slug: PageKey; title: string; text: string }
+// text is what the merchant wrote; blocks is the same text as safe blocks (see
+// rich-text.ts), which is what a storefront should draw.
+export type PublicPage = { slug: PageKey; title: string; text: string; blocks: Block[] }
 
 export type ParseResult =
   | { ok: true; value: FooterContent }
@@ -416,7 +421,20 @@ export function publicPage(content: FooterContent, slug: string): PublicPage | n
   if (!key || content.pages[key] === "") {
     return null
   }
-  return { slug: key, title: PAGE_TITLES[key], text: content.pages[key] }
+  const text = content.pages[key]
+  return { slug: key, title: PAGE_TITLES[key], text, blocks: parseRichText(text) }
+}
+
+// The blocks of some text, for the portal's preview. The text goes through the
+// same cleaning and the same length limit as a page that is saved.
+export function previewPage(
+  text: string
+): { ok: true; blocks: Block[] } | { ok: false; error: string } {
+  const cleaned = cleanPageText(text)
+  if (cleaned.length > MAX_PAGE_LENGTH) {
+    return { ok: false, error: `The page is too long (at most ${MAX_PAGE_LENGTH} characters)` }
+  }
+  return { ok: true, blocks: parseRichText(cleaned) }
 }
 
 export function toPublicFooter(

@@ -7,6 +7,7 @@ import {
   emptyFooter,
   normalizeSocialUrl,
   parseFooterContent,
+  previewPage,
   publicPage,
   publicShopCategories,
   readStoredFooter,
@@ -408,10 +409,48 @@ describe("support pages", () => {
   it("gives one page with its text, or null", () => {
     const footer = emptyFooter()
     footer.pages.privacy = "Private"
-    expect(publicPage(footer, "privacy")).toEqual({ slug: "privacy", title: "Privacy Policy", text: "Private" })
+    expect(publicPage(footer, "privacy")).toEqual({
+      slug: "privacy",
+      title: "Privacy Policy",
+      text: "Private",
+      blocks: [{ type: "paragraph", content: [{ type: "text", text: "Private" }] }],
+    })
     expect(publicPage(footer, "terms")).toBe(null)
     expect(publicPage(footer, "nope")).toBe(null)
     expect(publicPage(footer, "constructor")).toBe(null)
     expect(publicPage(footer, "")).toBe(null)
+  })
+})
+
+describe("rich text in pages", () => {
+  it("serves the blocks of the page text", () => {
+    const footer = emptyFooter()
+    footer.pages.terms = "## Rules\n\n- one\n  - two\n\n**Bold** text"
+    const page = publicPage(footer, "terms")!
+    expect(page.text).toBe("## Rules\n\n- one\n  - two\n\n**Bold** text")
+    expect(page.blocks.map((b) => b.type)).toEqual(["heading", "list", "paragraph"])
+  })
+
+  it("keeps the indentation of nested lists when the text is saved", () => {
+    const text = "- a\n  - b\n    - c"
+    expect(parsed({ pages: { privacy: text } }).pages.privacy).toBe(text)
+  })
+
+  it("accepts a long page up to the limit", () => {
+    expect(MAX_PAGE_LENGTH).toBe(20000)
+  })
+
+  it("previews text like a saved page and refuses text that is too long", () => {
+    const result = previewPage("# Hi\n\n- a")
+    expect(result.ok && result.blocks.map((b) => b.type)).toEqual(["heading", "list"])
+    expect(previewPage("a".repeat(MAX_PAGE_LENGTH)).ok).toBe(true)
+    expect(previewPage("a".repeat(MAX_PAGE_LENGTH + 1)).ok).toBe(false)
+    const empty = previewPage("   ")
+    expect(empty.ok && empty.blocks).toEqual([])
+  })
+
+  it("previews with the same cleaning as saving", () => {
+    const result = previewPage("one\r\n\r\n\r\n\r\ntwo\u0007")
+    expect(result.ok && result.blocks.length).toBe(2)
   })
 })

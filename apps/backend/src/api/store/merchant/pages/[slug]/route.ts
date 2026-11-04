@@ -9,9 +9,19 @@ import { salesChannelIdsFromKey } from "../../../../store-key"
  *
  * A support page of the merchant whose publishable key is on the request. The
  * slug is one of contact, shipping, returns, privacy, terms. Answer:
- * { slug, title, text } where text is plain text and a blank line separates
- * paragraphs (show it as text, never as HTML). A page the merchant has not
- * written is a 404.
+ * { slug, title, text, blocks }.
+ *
+ * Draw `blocks`: the text the merchant wrote, already split into safe pieces
+ * (see rich-text.ts), so a storefront needs no Markdown parser and never
+ * handles HTML:
+ *   heading    { type: "heading", level: 1 | 2 | 3, content: Inline[] }
+ *   paragraph  { type: "paragraph", content: Inline[] }
+ *   list       { type: "list", ordered: boolean, items: [{ content: Inline[], children: list[] }] }
+ *   rule       { type: "rule" }
+ * An Inline is { type: "text", text, bold?, italic? }, { type: "break" } or
+ * { type: "link", href, children: text[] } (href is https, mailto: or tel:).
+ * `text` is the raw text, for a storefront that only wants plain text.
+ * A page the merchant has not written is a 404.
  */
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const channelIds = salesChannelIdsFromKey(req)
