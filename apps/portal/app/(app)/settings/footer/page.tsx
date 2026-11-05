@@ -26,12 +26,26 @@ import {
   PAGE_TITLES,
   addShopCategory,
   emptyFooter,
+  findFooterProblem,
   moveShopCategory,
   removeShopCategory,
-  validateFooter,
   visibleNetworks,
   visiblePages,
 } from '@/lib/footer';
+import type { FooterTab } from '@/lib/footer';
+import { CollapsibleRow, RowBadge } from '@/components/settings/CollapsibleRow';
+import { SaveBar } from '@/components/settings/SaveBar';
+import { SettingsTabs, panelProps } from '@/components/settings/SettingsTabs';
+import {
+  cardStyle,
+  counterStyle,
+  iconButton,
+  inputStyle,
+  labelStyle,
+  sectionHintStyle,
+  sectionTitleStyle,
+  smallButton,
+} from '@/components/settings/styles';
 
 // What the server sends, with every part present even if the server is older
 // than this page.
@@ -46,71 +60,6 @@ function completeFooter(footer: Partial<FooterContent> | undefined): FooterConte
   };
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  height: '44px',
-  boxSizing: 'border-box',
-  padding: '0 17px',
-  border: '1px solid #E6E8EC',
-  borderRadius: '22px',
-  background: '#FFFFFF',
-  fontFamily: 'inherit',
-  fontSize: '16px',
-  color: '#111827',
-  outline: 'none',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-  fontSize: '14px',
-  fontWeight: 500,
-  color: '#1F2937',
-  minWidth: 0,
-};
-
-const pillButton: React.CSSProperties = {
-  height: '44px',
-  boxSizing: 'border-box',
-  padding: '0 20px',
-  borderRadius: '22px',
-  fontFamily: 'inherit',
-  fontSize: '16px',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const smallButton: React.CSSProperties = {
-  height: '36px',
-  boxSizing: 'border-box',
-  padding: '0 16px',
-  borderRadius: '18px',
-  border: '1px solid #D1D5DB',
-  background: '#FFFFFF',
-  color: '#374151',
-  fontFamily: 'inherit',
-  fontSize: '14px',
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const cardStyle: React.CSSProperties = {
-  margin: '0 16px 17px 24px',
-  background: '#FFFFFF',
-  borderRadius: '24px',
-  display: 'flex',
-  flexDirection: 'column',
-  minWidth: 0,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-};
-
-const counterStyle: React.CSSProperties = {
-  alignSelf: 'flex-end',
-  fontSize: '12px',
-  fontWeight: 400,
-  color: '#6B7280',
-};
 
 // How a page will look to shoppers. The server draws it from the same text, so
 // this is exactly what the storefront will show.
@@ -193,6 +142,9 @@ export default function FooterSettingsPage() {
   // got pasted text with formatting
   const [previewing, setPreviewing] = useState<Partial<Record<FooterPageKey, boolean>>>({});
   const [pasted, setPasted] = useState<Partial<Record<FooterPageKey, boolean>>>({});
+  // One section is shown at a time, and one support page is open
+  const [tab, setTab] = useState<FooterTab>('about');
+  const [openPage, setOpenPage] = useState<FooterPageKey | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -282,8 +234,13 @@ export default function FooterSettingsPage() {
   };
 
   const handleSave = async () => {
-    const problem = validateFooter(footer, limits, categories);
-    if (problem) return setMessage({ kind: 'error', text: problem });
+    const problem = findFooterProblem(footer, limits, categories);
+    if (problem) {
+      // Take the merchant to the part that needs attention
+      setTab(problem.tab);
+      if (problem.pageKey) setOpenPage(problem.pageKey);
+      return setMessage({ kind: 'error', text: problem.message });
+    }
 
     setSaving(true);
     setMessage(null);
@@ -343,266 +300,276 @@ export default function FooterSettingsPage() {
   );
   const columnFull = footer.shop_category_ids.length >= limits.shop_categories;
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      {message && (
-        <div
-          role={message.kind === 'error' ? 'alert' : 'status'}
-          style={{
-            margin: '0 16px 17px 24px',
-            padding: '10px 16px',
-            borderRadius: '14px',
-            fontSize: '14px',
-            fontWeight: 500,
-            border: `1px solid ${message.kind === 'ok' ? '#9BDDB4' : '#F5B5B5'}`,
-            background: message.kind === 'ok' ? '#F2FBF6' : '#FEF2F2',
-            color: message.kind === 'ok' ? '#17803F' : '#B42318',
-          }}
-        >
-          {message.text}
-        </div>
-      )}
 
-      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-about-heading">
-        <h2 id="footer-about-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
-          About your store
-        </h2>
-        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
-          The name and the short text shown at the bottom of every page of your store.
-        </p>
-        <div style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
-          <label style={labelStyle}>
-            Store name
-            <input
-              type="text"
-              value={footer.store_name}
-              onChange={(e) => setText('store_name', e.target.value)}
-              placeholder="Leave empty to use your store's usual name"
-              style={inputStyle}
-            />
-            <span style={counterStyle}>
-              {footer.store_name.length} / {limits.store_name}
-            </span>
-          </label>
-          <label style={labelStyle}>
-            Description
-            <textarea
-              value={footer.description}
-              onChange={(e) => setText('description', e.target.value)}
-              rows={3}
-              placeholder="A short sentence about your store"
+  const pageBadges = (key: FooterPageKey): RowBadge[] =>
+    footer.pages[key].trim() === ''
+      ? [{ text: 'Hidden', tone: 'muted' }]
+      : [{ text: 'Shown', tone: 'ok' }];
+
+  const pad: React.CSSProperties = { padding: '20px 24px 24px' };
+
+  const aboutPanel = (
+    <div {...panelProps('footer', 'about')} style={pad}>
+      <h2 id="footer-about-heading" style={sectionTitleStyle}>
+        About your store
+      </h2>
+      <p style={sectionHintStyle}>The name and the short text shown at the bottom of every page of your store.</p>
+      <div style={{ display: 'grid', gap: '16px', marginTop: '16px', maxWidth: '640px' }}>
+        <label style={labelStyle}>
+          Store name
+          <input
+            type="text"
+            value={footer.store_name}
+            onChange={(e) => setText('store_name', e.target.value)}
+            placeholder="Leave empty to use your store's usual name"
+            style={inputStyle}
+          />
+          <span style={counterStyle}>
+            {footer.store_name.length} / {limits.store_name}
+          </span>
+        </label>
+        <label style={labelStyle}>
+          Description
+          <textarea
+            value={footer.description}
+            onChange={(e) => setText('description', e.target.value)}
+            rows={3}
+            placeholder="A short sentence about your store"
+            style={{
+              ...inputStyle,
+              height: 'auto',
+              minHeight: '88px',
+              padding: '12px 17px',
+              borderRadius: '18px',
+              resize: 'vertical',
+              lineHeight: '24px',
+            }}
+          />
+          <span style={counterStyle}>
+            {footer.description.length} / {limits.description}
+          </span>
+        </label>
+      </div>
+    </div>
+  );
+
+  const socialPanel = (
+    <div {...panelProps('footer', 'social')} style={pad}>
+      <h2 id="footer-social-heading" style={sectionTitleStyle}>
+        Social media
+      </h2>
+      <p style={sectionHintStyle}>
+        Paste the link of your page, or just your @name. Switch a network off to hide it from your footer without losing
+        the link.
+      </p>
+      <ul style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px' }}>
+        {NETWORKS.map((network) => {
+          const link = footer.social[network];
+          const empty = link.url.trim() === '';
+          return (
+            <li
+              key={network}
               style={{
-                ...inputStyle,
-                height: 'auto',
-                minHeight: '88px',
-                padding: '12px 17px',
+                border: '1px solid #E6E8EC',
                 borderRadius: '18px',
-                resize: 'vertical',
-                lineHeight: '24px',
+                padding: '10px 14px',
+                background: link.enabled ? '#FFFFFF' : '#F7F8FA',
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px 14px',
               }}
-            />
-            <span style={counterStyle}>
-              {footer.description.length} / {limits.description}
-            </span>
-          </label>
-        </div>
-      </section>
-
-      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-social-heading">
-        <h2 id="footer-social-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
-          Social media
-        </h2>
-        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
-          Paste the link of your page, or just your @name. Switch a network off to hide it from your footer without losing
-          the link.
-        </p>
-        <ul style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '14px' }}>
-          {NETWORKS.map((network) => {
-            const link = footer.social[network];
-            const empty = link.url.trim() === '';
-            return (
-              <li
-                key={network}
-                style={{
-                  border: '1px solid #E6E8EC',
-                  borderRadius: '18px',
-                  padding: '16px',
-                  background: link.enabled ? '#FFFFFF' : '#F7F8FA',
-                  display: 'grid',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: '16px', flex: '1 1 auto' }}>{NETWORK_NAMES[network]}</strong>
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                      opacity: empty ? 0.55 : 1,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={link.enabled}
-                      disabled={empty}
-                      onChange={(e) => setLink(network, { enabled: e.target.checked })}
-                      aria-label={`Show ${NETWORK_NAMES[network]} in my footer`}
-                    />
-                    Show in my footer
-                  </label>
-                </div>
-                <input
-                  type="text"
-                  inputMode="url"
-                  autoComplete="off"
-                  value={link.url}
-                  onChange={(e) => setLink(network, { url: e.target.value })}
-                  placeholder={NETWORK_PLACEHOLDERS[network]}
-                  aria-label={`${NETWORK_NAMES[network]} link`}
-                  style={inputStyle}
-                />
-                {empty && (
-                  <span style={{ fontSize: '12px', color: '#6B7280' }}>Add the link to be able to switch it on.</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-shop-heading">
-        <h2 id="footer-shop-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
-          Shop column
-        </h2>
-        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
-          Up to {limits.shop_categories} of your categories, listed under &quot;Shop&quot; in your footer, in this order.
-        </p>
-
-        {categoriesFailed && (
-          <p role="alert" style={{ margin: '12px 0 0', fontSize: '14px', color: '#B42318' }}>
-            Your categories could not be loaded, so you cannot change this list now. Reload the page to try again.
-          </p>
-        )}
-
-        {shopColumn.length === 0 ? (
-          <p style={{ margin: '16px 0 0', fontSize: '14px', color: '#6B7280' }}>
-            No category chosen. The Shop column is not shown.
-          </p>
-        ) : (
-          <ol data-testid="shop-column" style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px' }}>
-            {shopColumn.map(({ id, category }, index) => (
-              <li
-                key={id}
+            >
+              <strong style={{ fontSize: '15px', flex: '0 0 96px' }}>{NETWORK_NAMES[network]}</strong>
+              <input
+                type="text"
+                inputMode="url"
+                autoComplete="off"
+                value={link.url}
+                onChange={(e) => setLink(network, { url: e.target.value })}
+                placeholder={NETWORK_PLACEHOLDERS[network]}
+                aria-label={`${NETWORK_NAMES[network]} link`}
+                style={{ ...inputStyle, flex: '1 1 260px', width: 'auto' }}
+              />
+              <label
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  flexWrap: 'wrap',
-                  border: '1px solid #E6E8EC',
-                  borderRadius: '18px',
-                  padding: '10px 14px',
-                  background: category && category.is_active !== false ? '#FFFFFF' : '#F7F8FA',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  opacity: empty ? 0.55 : 1,
+                  flex: '0 0 auto',
                 }}
               >
-                <span style={{ flex: '1 1 160px', minWidth: 0, fontSize: '15px', fontWeight: 500 }}>
-                  {category ? category.name : categories ? 'This category no longer exists' : 'Category'}
-                  {category && category.is_active === false && (
-                    <span style={{ marginLeft: '8px', fontSize: '12px', color: '#B54708' }}>
-                      switched off, not shown to shoppers
-                    </span>
-                  )}
+                <input
+                  type="checkbox"
+                  checked={link.enabled}
+                  disabled={empty}
+                  onChange={(e) => setLink(network, { enabled: e.target.checked })}
+                  aria-label={`Show ${NETWORK_NAMES[network]} in my footer`}
+                />
+                Show
+              </label>
+              {empty && (
+                <span style={{ flex: '1 1 100%', fontSize: '12px', color: '#6B7280' }}>
+                  Add the link to be able to switch it on.
                 </span>
-                <button
-                  type="button"
-                  style={smallButton}
-                  disabled={index === 0}
-                  onClick={() => setShopCategories(moveShopCategory(footer.shop_category_ids, id, -1))}
-                  aria-label={`Move ${category ? category.name : 'category'} up`}
-                >
-                  Up
-                </button>
-                <button
-                  type="button"
-                  style={smallButton}
-                  disabled={index === shopColumn.length - 1}
-                  onClick={() => setShopCategories(moveShopCategory(footer.shop_category_ids, id, 1))}
-                  aria-label={`Move ${category ? category.name : 'category'} down`}
-                >
-                  Down
-                </button>
-                <button
-                  type="button"
-                  style={smallButton}
-                  onClick={() => setShopCategories(removeShopCategory(footer.shop_category_ids, id))}
-                  aria-label={`Remove ${category ? category.name : 'category'}`}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 
-        <label style={{ ...labelStyle, marginTop: '16px' }}>
-          Add a category
-          <select
-            value=""
-            disabled={columnFull || addable.length === 0 || categories === null}
-            onChange={(e) =>
-              setShopCategories(addShopCategory(footer.shop_category_ids, e.target.value, limits.shop_categories))
-            }
-            style={inputStyle}
-          >
-            <option value="">
-              {columnFull
-                ? `The column is full (${limits.shop_categories} categories)`
-                : addable.length === 0
-                  ? 'No other category to add'
-                  : 'Choose a category'}
-            </option>
-            {addable.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+  const shopPanel = (
+    <div {...panelProps('footer', 'shop')} style={pad}>
+      <h2 id="footer-shop-heading" style={sectionTitleStyle}>
+        Shop column
+      </h2>
+      <p style={sectionHintStyle}>
+        Up to {limits.shop_categories} of your categories, listed under &quot;Shop&quot; in your footer, in this order.
+      </p>
 
-      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-pages-heading">
-        <h2 id="footer-pages-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
-          Support pages
-        </h2>
-        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
-          Write the text of each page. A page with no text is left out of your footer.
+      {categoriesFailed && (
+        <p role="alert" style={{ margin: '12px 0 0', fontSize: '14px', color: '#B42318' }}>
+          Your categories could not be loaded, so you cannot change this list now. Reload the page to try again.
         </p>
-        <div
-          data-testid="formatting-tip"
-          style={{
-            margin: '12px 0 0',
-            padding: '12px 16px',
-            borderRadius: '14px',
-            background: '#F7F8FA',
-            border: '1px solid #E6E8EC',
-            fontSize: '13px',
-            lineHeight: '20px',
-            color: '#4B5263',
-          }}
+      )}
+
+      {shopColumn.length === 0 ? (
+        <p style={{ margin: '16px 0 0', fontSize: '14px', color: '#6B7280' }}>
+          No category chosen. The Shop column is not shown.
+        </p>
+      ) : (
+        <ol data-testid="shop-column" style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px' }}>
+          {shopColumn.map(({ id, category }, index) => {
+            const name = category ? category.name : 'category';
+            const off = category && category.is_active === false;
+            return (
+              <CollapsibleRow
+                key={id}
+                id={`shop-${id}`}
+                open={false}
+                onToggle={() => undefined}
+                title={category ? category.name : categories ? 'This category no longer exists' : 'Category'}
+                subtitle={off ? 'Switched off, not shown to shoppers' : undefined}
+                tone={category && !off ? 'normal' : 'muted'}
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      style={{ ...iconButton, opacity: index === 0 ? 0.4 : 1 }}
+                      disabled={index === 0}
+                      onClick={() => setShopCategories(moveShopCategory(footer.shop_category_ids, id, -1))}
+                      aria-label={`Move ${name} up`}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...iconButton, opacity: index === shopColumn.length - 1 ? 0.4 : 1 }}
+                      disabled={index === shopColumn.length - 1}
+                      onClick={() => setShopCategories(moveShopCategory(footer.shop_category_ids, id, 1))}
+                      aria-label={`Move ${name} down`}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...smallButton, color: '#B42318', borderColor: '#F5B5B5' }}
+                      onClick={() => setShopCategories(removeShopCategory(footer.shop_category_ids, id))}
+                      aria-label={`Remove ${name}`}
+                    >
+                      Remove
+                    </button>
+                  </>
+                }
+              />
+            );
+          })}
+        </ol>
+      )}
+
+      <label style={{ ...labelStyle, marginTop: '16px', maxWidth: '420px' }}>
+        Add a category
+        <select
+          value=""
+          disabled={columnFull || addable.length === 0 || categories === null}
+          onChange={(e) =>
+            setShopCategories(addShopCategory(footer.shop_category_ids, e.target.value, limits.shop_categories))
+          }
+          style={inputStyle}
         >
-          <strong style={{ color: '#1F2937' }}>Tip:</strong> you can paste text written by an AI assistant. Titles, bold
-          text, lists and links keep their look. You can also type them yourself: <code># Title</code>,{' '}
+          <option value="">
+            {columnFull
+              ? `The column is full (${limits.shop_categories} categories)`
+              : addable.length === 0
+                ? 'No other category to add'
+                : 'Choose a category'}
+          </option>
+          {addable.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+
+  const pagesPanel = (
+    <div {...panelProps('footer', 'pages')} style={pad}>
+      <h2 id="footer-pages-heading" style={sectionTitleStyle}>
+        Support pages
+      </h2>
+      <p style={sectionHintStyle}>
+        Write the text of each page. A page with no text is left out of your footer.
+      </p>
+      <details
+        data-testid="formatting-tip"
+        style={{
+          margin: '12px 0 0',
+          padding: '10px 16px',
+          borderRadius: '14px',
+          background: '#F7F8FA',
+          border: '1px solid #E6E8EC',
+          fontSize: '13px',
+          lineHeight: '20px',
+          color: '#4B5263',
+        }}
+      >
+        <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#1F2937' }}>
+          Tip: you can paste text written by an AI assistant
+        </summary>
+        <p style={{ margin: '8px 0 0' }}>
+          Titles, bold text, lists and links keep their look. You can also type them yourself: <code># Title</code>,{' '}
           <code>## Section</code>, <code>**bold**</code>, <code>- item</code> (indent a line for a sub-item),{' '}
           <code>1. item</code>, <code>[text](https://...)</code>. A blank line starts a new paragraph. Use{' '}
           <em>Preview</em> to see the result.
-        </div>
-        <div style={{ display: 'grid', gap: '22px', marginTop: '16px' }}>
-          {PAGE_KEYS.map((key) => (
-            <div key={key} style={labelStyle}>
+        </p>
+      </details>
+      <ul style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px' }}>
+        {PAGE_KEYS.map((key) => (
+          <CollapsibleRow
+            key={key}
+            id={`page-${key}`}
+            open={openPage === key}
+            onToggle={() => setOpenPage((prev) => (prev === key ? null : key))}
+            title={PAGE_TITLES[key]}
+            subtitle={
+              footer.pages[key].trim() === ''
+                ? 'Empty: left out of your footer'
+                : `${footer.pages[key].length.toLocaleString('en-US')} characters`
+            }
+            badges={pageBadges(key)}
+          >
+            <div style={labelStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <span style={{ flex: '1 1 auto' }}>{PAGE_TITLES[key]}</span>
+                <span style={{ flex: '1 1 auto', fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>
+                  {PAGE_HINTS[key]}
+                </span>
                 <span role="group" aria-label={`${PAGE_TITLES[key]} view`} style={{ display: 'flex', gap: '6px' }}>
                   {(['Edit', 'Preview'] as const).map((mode) => {
                     const active = (mode === 'Preview') === Boolean(previewing[key]);
@@ -626,7 +593,6 @@ export default function FooterSettingsPage() {
                   })}
                 </span>
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 400, color: '#6B7280' }}>{PAGE_HINTS[key]}</span>
               {previewing[key] ? (
                 <PagePreview text={footer.pages[key]} />
               ) : (
@@ -658,92 +624,93 @@ export default function FooterSettingsPage() {
                 {footer.pages[key].length} / {limits.page}
               </span>
             </div>
-          ))}
-        </div>
-      </section>
+          </CollapsibleRow>
+        ))}
+      </ul>
+    </div>
+  );
 
-      <section style={{ ...cardStyle, padding: '24px' }} aria-labelledby="footer-preview-heading">
-        <h2 id="footer-preview-heading" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
-          Preview
-        </h2>
-        <p style={{ margin: '4px 0 16px', fontSize: '14px', color: '#4B5263' }}>
-          A simple preview. The look follows the design of your store.
-        </p>
-        <div
-          data-testid="footer-preview"
-          style={{ border: '1px solid #E6E8EC', borderRadius: '16px', background: '#FAFAFA', padding: '20px' }}
-        >
-          <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {footer.store_name.trim() || 'Your store name'}
-          </p>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#4B5263' }}>
-            {footer.description.trim() || 'Your store usually shows its own line here.'}
-          </p>
-          {shown.length > 0 && (
-            <p style={{ margin: '14px 0 0', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px', fontWeight: 600 }}>
-              {shown.map((network) => (
-                <span key={network} data-network={network}>
-                  {NETWORK_NAMES[network]}
-                </span>
-              ))}
-            </p>
-          )}
-          {(shopColumn.length > 0 || shownPages.length > 0) && (
-            <div style={{ margin: '16px 0 0', display: 'flex', gap: '40px', flexWrap: 'wrap', fontSize: '13px' }}>
-              {shopColumn.length > 0 && (
-                <div data-testid="preview-shop">
-                  <p style={{ margin: 0, fontWeight: 700 }}>Shop</p>
-                  <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '4px', color: '#4B5263' }}>
-                    {shopColumn.map(({ id, category }) => (
-                      <li key={id}>{category ? category.name : '…'}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {shownPages.length > 0 && (
-                <div data-testid="preview-support">
-                  <p style={{ margin: 0, fontWeight: 700 }}>Support</p>
-                  <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '4px', color: '#4B5263' }}>
-                    {shownPages.map((key) => (
-                      <li key={key} data-page={key}>
-                        {PAGE_TITLES[key]}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
+  const previewPanel = (
+    <div {...panelProps('footer', 'preview')} style={pad}>
+      <h2 id="footer-preview-heading" style={sectionTitleStyle}>
+        Preview
+      </h2>
+      <p style={{ ...sectionHintStyle, margin: '4px 0 16px' }}>
+        A simple preview. The look follows the design of your store.
+      </p>
       <div
-        style={{
-          margin: '0 16px 32px 24px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          gap: '12px',
-        }}
+        data-testid="footer-preview"
+        style={{ border: '1px solid #E6E8EC', borderRadius: '16px', background: '#FAFAFA', padding: '20px' }}
       >
-        <button
-          type="button"
-          disabled={saving || !dirty}
-          onClick={handleSave}
-          style={{
-            ...pillButton,
-            border: 0,
-            background: 'var(--accent)',
-            color: '#FFFFFF',
-            opacity: saving || !dirty ? 0.6 : 1,
-          }}
-        >
-          {saving ? 'Saving...' : 'Save changes'}
-        </button>
-        <span style={{ fontSize: '14px', color: dirty ? '#B54708' : '#6B7280' }}>
-          {dirty ? 'You have unsaved changes.' : 'All changes saved.'}
-        </span>
+        <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          {footer.store_name.trim() || 'Your store name'}
+        </p>
+        <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#4B5263' }}>
+          {footer.description.trim() || 'Your store usually shows its own line here.'}
+        </p>
+        {shown.length > 0 && (
+          <p style={{ margin: '14px 0 0', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px', fontWeight: 600 }}>
+            {shown.map((network) => (
+              <span key={network} data-network={network}>
+                {NETWORK_NAMES[network]}
+              </span>
+            ))}
+          </p>
+        )}
+        {(shopColumn.length > 0 || shownPages.length > 0) && (
+          <div style={{ margin: '16px 0 0', display: 'flex', gap: '40px', flexWrap: 'wrap', fontSize: '13px' }}>
+            {shopColumn.length > 0 && (
+              <div data-testid="preview-shop">
+                <p style={{ margin: 0, fontWeight: 700 }}>Shop</p>
+                <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '4px', color: '#4B5263' }}>
+                  {shopColumn.map(({ id, category }) => (
+                    <li key={id}>{category ? category.name : '…'}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {shownPages.length > 0 && (
+              <div data-testid="preview-support">
+                <p style={{ margin: 0, fontWeight: 700 }}>Support</p>
+                <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '4px', color: '#4B5263' }}>
+                  {shownPages.map((key) => (
+                    <li key={key} data-page={key}>
+                      {PAGE_TITLES[key]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <section style={{ ...cardStyle, margin: '0 16px 0 24px', overflow: 'hidden' }} aria-label="Store footer">
+        <SettingsTabs<FooterTab>
+          idPrefix="footer"
+          label="Parts of your footer"
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'about', label: 'About' },
+            { id: 'social', label: 'Social media', badge: `${shown.length} / ${NETWORKS.length}` },
+            { id: 'shop', label: 'Shop column', badge: `${shopColumn.length} / ${limits.shop_categories}` },
+            { id: 'pages', label: 'Support pages', badge: `${shownPages.length} / ${PAGE_KEYS.length}` },
+            { id: 'preview', label: 'Preview' },
+          ]}
+        />
+        {tab === 'about' && aboutPanel}
+        {tab === 'social' && socialPanel}
+        {tab === 'shop' && shopPanel}
+        {tab === 'pages' && pagesPanel}
+        {tab === 'preview' && previewPanel}
+      </section>
+
+      <SaveBar dirty={dirty} saving={saving} message={message} onSave={handleSave} />
     </div>
   );
 }

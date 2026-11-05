@@ -59,46 +59,59 @@ export function emptyFooter(): FooterContent {
   };
 }
 
+export type FooterTab = 'about' | 'social' | 'shop' | 'pages' | 'preview';
+
+export type FooterProblem = { message: string; tab: FooterTab; pageKey?: FooterPageKey };
+
 // `categories` is null while the list is not loaded: the server then checks the
-// categories. A message for the merchant, or null when the footer can be saved.
-// The server checks the links themselves; this only catches what is easy to see
-// here.
-export function validateFooter(
+// categories. The first problem with where it is (which tab, and which page), or
+// null when the footer can be saved. The server checks the links themselves; this
+// only catches what is easy to see here.
+export function findFooterProblem(
   footer: FooterContent,
   limits: FooterLimits,
   categories: Array<{ id: string }> | null = null
-): string | null {
+): FooterProblem | null {
   if (footer.store_name.trim().length > limits.store_name) {
-    return `The store name can have at most ${limits.store_name} characters.`;
+    return { tab: 'about', message: `The store name can have at most ${limits.store_name} characters.` };
   }
   if (footer.description.trim().length > limits.description) {
-    return `The description can have at most ${limits.description} characters.`;
+    return { tab: 'about', message: `The description can have at most ${limits.description} characters.` };
   }
   for (const network of NETWORKS) {
     const link = footer.social[network];
     if (link.url.length > limits.social_url) {
-      return `${NETWORK_NAMES[network]}: the link is too long.`;
+      return { tab: 'social', message: `${NETWORK_NAMES[network]}: the link is too long.` };
     }
     if (link.enabled && link.url.trim() === '') {
-      return `${NETWORK_NAMES[network]}: add the link, or switch it off.`;
+      return { tab: 'social', message: `${NETWORK_NAMES[network]}: add the link, or switch it off.` };
     }
   }
   if (footer.shop_category_ids.length > limits.shop_categories) {
-    return `The Shop column can have at most ${limits.shop_categories} categories.`;
+    return { tab: 'shop', message: `The Shop column can have at most ${limits.shop_categories} categories.` };
   }
   if (categories) {
     for (const id of footer.shop_category_ids) {
       if (!categories.some((c) => c.id === id)) {
-        return 'A category of the Shop column no longer exists. Remove it from the list.';
+        return { tab: 'shop', message: 'A category of the Shop column no longer exists. Remove it from the list.' };
       }
     }
   }
   for (const key of PAGE_KEYS) {
     if (footer.pages[key].trim().length > limits.page) {
-      return `${PAGE_TITLES[key]} can have at most ${limits.page} characters.`;
+      return { tab: 'pages', pageKey: key, message: `${PAGE_TITLES[key]} can have at most ${limits.page} characters.` };
     }
   }
   return null;
+}
+
+// Only the message, for callers that do not need to know where the problem is
+export function validateFooter(
+  footer: FooterContent,
+  limits: FooterLimits,
+  categories: Array<{ id: string }> | null = null
+): string | null {
+  return findFooterProblem(footer, limits, categories)?.message ?? null;
 }
 
 // The networks the footer will show: switched on and with a link
