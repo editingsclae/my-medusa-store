@@ -4,6 +4,8 @@ import { createProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-f
 import { getMerchantContext } from "../utils"
 import { errorText, parseStock } from "../product-inputs"
 import { setInitialStock } from "../product-stock"
+import { setInitialVariantStock } from "../product-variants"
+import { hasVariantsDraft, parseVariantsDraft, variantTitle, type VariantsDraft } from "../variant-rules"
 import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
 import { getDefaultShippingProfileId } from "../fulfillment"
 
@@ -59,6 +61,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "variants.inventory_items.inventory.id",
       "variants.inventory_items.inventory.location_levels.*",
       "options.*",
+      "options.values.*",
     ],
     filters,
     pagination: {
@@ -130,12 +133,23 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       ? await assertCategoriesOwned(req.scope, context.salesChannelId, body.category_ids)
       : []
 
+  // Options and variants (Size, Color...) with a price and stock for each one.
+  // They are checked here, before anything is created.
+  let draft: VariantsDraft | null = null
+  if (hasVariantsDraft(body)) {
+    const parsed = parseVariantsDraft(body)
+    if (!parsed.ok) {
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
+    }
+    draft = parsed.value
+  }
+
   // New products start with 10 in stock unless the merchant says otherwise
   const stockInput = parseStock(body.inventory_quantity !== undefined ? body.inventory_quantity : 10)
-  if (!stockInput.ok) {
+  if (!stockInput.ok && !draft) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, stockInput.message)
   }
-  const initialStock = stockInput.value
+  const initialStock = stockInput.ok ? stockInput.value : 10
 
   // Format product input for createProductsWorkflow
   const productInput: any = {
@@ -156,24 +170,19 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       },
     ],
     ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
-    options: body.options?.length
-      ? body.options
+    options: draft
+      ? draft.options.map((o) => ({ title: o.title, values: o.values }))
       : [{ title: "Default Option", values: ["Default"] }],
   }
 
   // Handle variants and pricing
-  if (body.variants?.length) {
-    productInput.variants = body.variants.map((v: any) => ({
-      title: v.title || "Default Variant",
-      sku: v.sku,
+  if (draft) {
+    const titles = draft.options.map((o) => o.title)
+    productInput.variants = draft.variants.map((v) => ({
+      title: variantTitle(titles, v.options),
       manage_inventory: true,
-      prices: v.prices || [
-        {
-          currency_code: (v.currency_code || context.currencyCode).toLowerCase(),
-          amount: Number(v.price ?? v.amount ?? 0),
-        },
-      ],
-      options: v.options || { "Default Option": "Default" },
+      prices: [{ currency_code: (body.currency_code || context.currencyCode).toLowerCase(), amount: v.price }],
+      options: v.options,
     }))
   } else {
     // Default single variant if none provided
@@ -205,7 +214,16 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   // so the merchant is never left with a product that cannot be sold.
   if (context.stockLocationId && createdProduct?.id) {
     try {
-      await setInitialStock(req.scope, createdProduct.id, context.stockLocationId, initialStock)
+      if (draft) {
+        await setInitialVariantStock(req.scope, {
+          productId: createdProduct.id,
+          productTitle: body.title,
+          locationId: context.stockLocationId,
+          draft,
+        })
+      } else {
+        await setInitialStock(req.scope, createdProduct.id, context.stockLocationId, initialStock)
+      }
     } catch (invErr) {
       console.error("Failed to set initial inventory levels:", invErr)
       try {

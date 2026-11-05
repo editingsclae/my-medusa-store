@@ -4,6 +4,8 @@ import { updateProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-f
 import { getMerchantContext } from "../../utils"
 import { parsePrice, parseStock, partialSaveMessage } from "../../product-inputs"
 import { setVariantStock, updateVariantPrice } from "../../product-stock"
+import { applyVariantPlan, planFor, VARIANT_FIELDS } from "../../product-variants"
+import { hasVariantsDraft, parseVariantsDraft, type VariantsDraft } from "../../variant-rules"
 import {
   assertCategoriesOwned,
   onlyOwnedCategories,
@@ -40,6 +42,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "variants.inventory_items.inventory.id",
       "variants.inventory_items.inventory.location_levels.*",
       "options.*",
+      "options.values.*",
     ],
     filters: {
       id: productId,
@@ -111,6 +114,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       "variants.prices.*",
       "variants.inventory_items.inventory.id",
       "variants.inventory_items.inventory.location_levels.*",
+      ...VARIANT_FIELDS,
     ],
     filters: { id: productId },
   })
@@ -132,10 +136,20 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     }
   }
 
+  // Options and variants (Size, Color...): checked before anything is saved
+  let draft: VariantsDraft | null = null
+  if (hasVariantsDraft(body)) {
+    const parsed = parseVariantsDraft(body)
+    if (!parsed.ok) {
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
+    }
+    draft = parsed.value
+  }
+
   // Check the price and stock before anything is saved, so a bad value cannot
   // leave the product half updated
   let newPrice: number | null = null
-  if (body.price !== undefined) {
+  if (body.price !== undefined && !draft) {
     const parsed = parsePrice(body.price)
     if (!parsed.ok) {
       throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
@@ -143,7 +157,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     newPrice = parsed.value
   }
   let newStock: number | null = null
-  if (body.inventory_quantity !== undefined) {
+  if (body.inventory_quantity !== undefined && !draft) {
     const parsed = parseStock(body.inventory_quantity)
     if (!parsed.ok) {
       throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
@@ -182,9 +196,27 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
-  // Update variant price and ensure manage_inventory: true. A failure here is
-  // reported to the merchant: the product details above are already saved.
-  if (product.variants?.length) {
+  // The options and variants the merchant chose replace the ones the product has.
+  // Each price and stock belongs to its own variant. A failure is reported to the
+  // merchant: the product details above are already saved, and saving again
+  // carries on from where this stopped.
+  if (draft) {
+    try {
+      await applyVariantPlan(req.scope, {
+        productId,
+        productTitle: product.title as string | undefined,
+        currencyCode: (body.currency_code || context.currencyCode || "usd").toLowerCase(),
+        locationId: context.stockLocationId,
+        plan: planFor(product, draft),
+      })
+    } catch (variantsErr) {
+      console.error("Failed to update variants:", variantsErr)
+      throw new MedusaError(
+        MedusaError.Types.UNEXPECTED_STATE,
+        partialSaveMessage("options and variants", variantsErr)
+      )
+    }
+  } else if (product.variants?.length) {
     const firstVariant = product.variants[0] as any
     const currency = (body.currency_code || context.currencyCode || "usd").toLowerCase()
 
