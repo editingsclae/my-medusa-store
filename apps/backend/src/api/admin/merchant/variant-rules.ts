@@ -14,6 +14,11 @@ export const MAX_VALUES_PER_OPTION = 20
 export const MAX_VARIANTS = 100
 export const MAX_NAME_LENGTH = 40
 
+// The option Medusa gives a product that has no options of its own ("Default Option",
+// with the value "Default"). A product that gets real options keeps it, hidden:
+// its variants cannot be moved off it while orders are reserved against them.
+export const DEFAULT_OPTION_TITLE = "Default Option"
+
 export type OptionInput = { title: string; values: string[] }
 
 export type VariantInput = {
@@ -203,6 +208,10 @@ export type VariantPlan = {
   updateOptionValues: Array<{ optionId: string; title: string; addValues: string[]; removeValueIds: string[] }>
   // Variants that stay: their price and stock are set
   updateVariants: Array<{ id: string; price: number; stock: number }>
+  // Variants that stay but become another combination (an option was added, for
+  // example S becomes S / Black). They are kept, not deleted and created again,
+  // because a variant with orders reserved against it cannot be deleted.
+  reuseVariants: Array<{ id: string; title: string; options: Record<string, string>; price: number; stock: number }>
   // New combinations. `options` uses the titles and values as the product spells them.
   createVariants: Array<{ title: string; options: Record<string, string>; price: number; stock: number }>
 }
@@ -232,11 +241,21 @@ export function planVariantSync(
       canonicalOptions.push(option)
     }
   }
+  // The placeholder option stays when the draft does not mention it: every variant
+  // keeps its value, and the merchant never sees it
+  const hiddenDefault = draft.options.some((o) => same(o.title, DEFAULT_OPTION_TITLE))
+    ? undefined
+    : currentOptions.find((c) => c.title === DEFAULT_OPTION_TITLE)
+  const hidden = hiddenDefault
+    ? { title: hiddenDefault.title, value: hiddenDefault.values[0]?.value ?? "Default" }
+    : undefined
+
   const removeOptionIds = currentOptions
-    .filter((c) => !draft.options.some((o) => same(o.title, c.title)))
+    .filter((c) => c !== hiddenDefault && !draft.options.some((o) => same(o.title, c.title)))
     .map((c) => c.id)
 
-  const titles = canonicalOptions.map((o) => o.title)
+  const visibleTitles = canonicalOptions.map((o) => o.title)
+  const titles = hidden ? [...visibleTitles, hidden.title] : visibleTitles
   const structureChanged = removeOptionIds.length > 0 || addOptions.length > 0
 
   // The draft's variants, in the product's spelling
@@ -248,6 +267,7 @@ export function planVariantSync(
       const match = canonicalOptions[index].values.find((v) => same(v, raw)) ?? raw
       options[canonicalOptions[index].title] = match
     })
+    if (hidden) options[hidden.title] = hidden.value
     return { ...variant, options }
   })
 
@@ -271,13 +291,40 @@ export function planVariantSync(
     }
   }
 
+  // A variant that is not kept as it is can become one of the combinations that are
+  // still missing, if its own values agree with it. That is possible as long as no
+  // option goes away: a variant must have a value for every option the product has.
+  const reuseVariants: VariantPlan["reuseVariants"] = []
+  if (removeOptionIds.length === 0) {
+    for (const current of currentVariants) {
+      if (keptIds.has(current.id)) continue
+      const index = wanted.findIndex(
+        (w, i) =>
+          !matched.has(i) &&
+          Object.entries(current.options).every(
+            ([title, value]) => w.options[title] === undefined || same(w.options[title], value)
+          )
+      )
+      if (index < 0) continue
+      matched.add(index)
+      keptIds.add(current.id)
+      reuseVariants.push({
+        id: current.id,
+        title: variantTitle(visibleTitles, wanted[index].options),
+        options: wanted[index].options,
+        price: wanted[index].price,
+        stock: wanted[index].inventory_quantity,
+      })
+    }
+  }
+
   const deleteVariantIds = currentVariants.filter((v) => !keptIds.has(v.id)).map((v) => v.id)
 
   const createVariants = wanted
     .map((variant, index) => ({ variant, index }))
     .filter(({ index }) => !matched.has(index))
     .map(({ variant }) => ({
-      title: variantTitle(titles, variant.options),
+      title: variantTitle(visibleTitles, variant.options),
       options: variant.options,
       price: variant.price,
       stock: variant.inventory_quantity,
@@ -296,7 +343,16 @@ export function planVariantSync(
     }
   }
 
-  return { optionTitles: titles, deleteVariantIds, removeOptionIds, addOptions, updateOptionValues, updateVariants, createVariants }
+  return {
+    optionTitles: titles,
+    deleteVariantIds,
+    removeOptionIds,
+    addOptions,
+    updateOptionValues,
+    updateVariants,
+    reuseVariants,
+    createVariants,
+  }
 }
 
 // The option titles of the current product, with each variant's values by title,

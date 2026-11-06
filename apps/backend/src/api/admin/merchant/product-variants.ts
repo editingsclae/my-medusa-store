@@ -2,7 +2,7 @@
 // thrown, not hidden: the caller turns them into an answer the merchant sees.
 
 import type { MedusaContainer } from "@medusajs/framework/types"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
 import {
   createAndLinkProductOptionsToProductWorkflow,
   createProductVariantsWorkflow,
@@ -61,6 +61,40 @@ async function readVariants(scope: MedusaContainer, productId: string): Promise<
   return ((data?.[0] as any)?.variants as any[]) || []
 }
 
+// Medusa does not delete a variant while an order that is not delivered yet has stock
+// reserved for it. Checked before anything is changed, so a refusal leaves the product as it was.
+async function assertNoReservations(scope: MedusaContainer, variantIds: string[]): Promise<void> {
+  if (variantIds.length === 0) return
+  const query = scope.resolve(ContainerRegistrationKeys.QUERY)
+  const { data } = await query.graph({
+    entity: "variants",
+    fields: ["id", "title", "inventory_items.inventory_item_id"],
+    filters: { id: variantIds },
+  })
+  const itemToVariant = new Map<string, string>()
+  for (const variant of (data as any[]) || []) {
+    for (const link of variant.inventory_items || []) {
+      if (link?.inventory_item_id) itemToVariant.set(link.inventory_item_id, variant.title || variant.id)
+    }
+  }
+  if (itemToVariant.size === 0) return
+
+  const inventory = scope.resolve(Modules.INVENTORY) as any
+  const reservations = await inventory.listReservationItems({ inventory_item_id: [...itemToVariant.keys()] })
+  const reserved = new Set<string>()
+  for (const reservation of reservations || []) {
+    const name = itemToVariant.get(reservation.inventory_item_id)
+    if (name) reserved.add(name)
+  }
+  if (reserved.size > 0) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      `These variants have orders that are not delivered yet, so they cannot be removed: ${[...reserved].join(", ")}. ` +
+        `Keep them on sale (set their stock to 0 if you stop selling them), or remove them after those orders are delivered.`
+    )
+  }
+}
+
 // Carries out a plan, step by step. The order matters: a variant has to be gone
 // before an option or a value it uses can be removed, and the options have to be
 // in place before the variants that use them are created.
@@ -76,6 +110,7 @@ export async function applyVariantPlan(
 ): Promise<void> {
   const { productId, plan, currencyCode } = options
 
+  await assertNoReservations(scope, plan.deleteVariantIds)
   if (plan.deleteVariantIds.length) {
     await deleteProductVariantsWorkflow(scope).run({ input: { ids: plan.deleteVariantIds } })
   }
@@ -96,15 +131,42 @@ export async function applyVariantPlan(
       input: { product_id: productId, remove: plan.removeOptionIds },
     })
   }
-  if (plan.updateOptionValues.length) {
+  // New values first: variants that are re-optioned or created below use them
+  const valuesToAdd = plan.updateOptionValues.filter((u) => u.addValues.length)
+  if (valuesToAdd.length) {
     await createAndLinkProductOptionsToProductWorkflow(scope).run({
       input: {
         product_id: productId,
-        update: plan.updateOptionValues.map((u) => ({
+        update: valuesToAdd.map((u) => ({
           product_option_id: u.optionId,
           add: u.addValues.map((value) => ({ value })),
-          remove: u.removeValueIds,
         })),
+      },
+    })
+  }
+
+  // Variants that become another combination, so they can leave the values below
+  if (plan.reuseVariants.length) {
+    await updateProductVariantsWorkflow(scope).run({
+      input: {
+        product_variants: plan.reuseVariants.map((v) => ({
+          id: v.id,
+          title: v.title,
+          options: v.options,
+          manage_inventory: true,
+          prices: [{ amount: v.price, currency_code: currencyCode }],
+        })),
+      },
+    })
+  }
+
+  // Values go away only once no variant uses them
+  const valuesToRemove = plan.updateOptionValues.filter((u) => u.removeValueIds.length)
+  if (valuesToRemove.length) {
+    await createAndLinkProductOptionsToProductWorkflow(scope).run({
+      input: {
+        product_id: productId,
+        update: valuesToRemove.map((u) => ({ product_option_id: u.optionId, remove: u.removeValueIds })),
       },
     })
   }
@@ -144,7 +206,7 @@ export async function applyVariantPlan(
       locationId: options.locationId,
       titles: plan.optionTitles,
       stockByCombo,
-      stockById: new Map(plan.updateVariants.map((v) => [v.id, v.stock])),
+      stockById: new Map([...plan.updateVariants, ...plan.reuseVariants].map((v) => [v.id, v.stock])),
     })
   }
 }

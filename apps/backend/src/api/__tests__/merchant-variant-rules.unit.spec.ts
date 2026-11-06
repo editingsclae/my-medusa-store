@@ -263,7 +263,7 @@ describe("planVariantSync", () => {
     expect(plan.updateVariants.map((v) => v.id)).toEqual(["v1", "v2"])
   })
 
-  it("rebuilds every variant when an option is added", () => {
+  it("keeps every variant, with its new combination, when an option is added", () => {
     const body = {
       options: [...full().options, { title: "Material", values: ["Cotton"] }],
       variants: full().variants.map((v) => ({ options: { ...v.options, Material: "Cotton" }, price: 5, inventory_quantity: 2 })),
@@ -271,10 +271,36 @@ describe("planVariantSync", () => {
     const plan = planVariantSync(currentOptions, currentVariants, draftOf(body))
     expect(plan.addOptions).toEqual([{ title: "Material", values: ["Cotton"] }])
     expect(plan.removeOptionIds).toEqual([])
-    expect(plan.deleteVariantIds).toEqual(["v1", "v2", "v3", "v4"])
+    // deleting a variant fails while an order has stock reserved for it, so they are all re-used
+    expect(plan.deleteVariantIds).toEqual([])
     expect(plan.updateVariants).toEqual([])
-    expect(plan.createVariants.length).toBe(4)
-    expect(plan.createVariants[0].title).toBe("S / Black / Cotton")
+    expect(plan.createVariants).toEqual([])
+    expect(plan.reuseVariants.map((v) => v.id)).toEqual(["v1", "v2", "v3", "v4"])
+    expect(plan.reuseVariants[0]).toEqual({
+      id: "v1",
+      title: "S / Black / Cotton",
+      options: { Size: "S", Color: "Black", Material: "Cotton" },
+      price: 5,
+      stock: 2,
+    })
+  })
+
+  it("re-uses a variant only for a combination that agrees with its own values", () => {
+    // Color is added; only S is kept, so the M variants are not needed
+    const body = {
+      options: [...full().options, { title: "Material", values: ["Cotton"] }],
+      variants: [
+        { options: { Size: "S", Color: "Black", Material: "Cotton" }, price: 5, inventory_quantity: 2 },
+        { options: { Size: "S", Color: "White", Material: "Cotton" }, price: 5, inventory_quantity: 2 },
+      ],
+    }
+    const plan = planVariantSync(currentOptions, currentVariants, draftOf(body))
+    expect(plan.reuseVariants.map((v) => [v.id, v.title])).toEqual([
+      ["v1", "S / Black / Cotton"],
+      ["v2", "S / White / Cotton"],
+    ])
+    expect(plan.deleteVariantIds).toEqual(["v3", "v4"])
+    expect(plan.createVariants).toEqual([])
   })
 
   it("rebuilds every variant when an option is removed", () => {
@@ -307,57 +333,103 @@ describe("planVariantSync", () => {
     expect(plan.createVariants.map((v) => v.title)).toEqual(["S", "M"])
   })
 
-  it("turns the single default variant of a product into real variants", () => {
+  it("turns the single default variant of a product into real variants without deleting it", () => {
     const options = [opt("o_def", "Default Option", ["Default"])]
     const variants = [cv("v0", { "Default Option": "Default" })]
     const body = {
       options: [{ title: "Size", values: ["S", "M"] }],
       variants: [
-        { id: "v0", options: { Size: "S" }, price: 30, inventory_quantity: 4 },
+        { options: { Size: "S" }, price: 30, inventory_quantity: 4 },
+        { options: { Size: "M" }, price: 31, inventory_quantity: 5 },
+      ],
+    }
+    const plan = planVariantSync(options, variants, draftOf(body))
+    // the placeholder option stays, hidden, so the variant that may have orders on it can stay
+    expect(plan.removeOptionIds).toEqual([])
+    expect(plan.deleteVariantIds).toEqual([])
+    expect(plan.addOptions).toEqual([{ title: "Size", values: ["S", "M"] }])
+    expect(plan.optionTitles).toEqual(["Size", "Default Option"])
+    expect(plan.reuseVariants).toEqual([
+      { id: "v0", title: "S", options: { Size: "S", "Default Option": "Default" }, price: 30, stock: 4 },
+    ])
+    expect(plan.createVariants).toEqual([
+      { title: "M", options: { Size: "M", "Default Option": "Default" }, price: 31, stock: 5 },
+    ])
+  })
+
+  it("keeps the hidden placeholder option of a product that was converted earlier", () => {
+    const options = [opt("o_def", "Default Option", ["Default"]), opt("o_size", "Size", ["S", "M"])]
+    const variants = [cv("v0", { Size: "S", "Default Option": "Default" }), cv("v1", { Size: "M", "Default Option": "Default" })]
+    const body = {
+      options: [{ title: "Size", values: ["S", "M"] }],
+      variants: [
+        { id: "v0", options: { Size: "S" }, price: 7, inventory_quantity: 1 },
+        { id: "v1", options: { Size: "M" }, price: 8, inventory_quantity: 2 },
+      ],
+    }
+    const plan = planVariantSync(options, variants, draftOf(body))
+    expect(plan.removeOptionIds).toEqual([])
+    expect(plan.deleteVariantIds).toEqual([])
+    expect(plan.reuseVariants).toEqual([])
+    expect(plan.updateVariants).toEqual([{ id: "v0", price: 7, stock: 1 }, { id: "v1", price: 8, stock: 2 }])
+  })
+
+  it("goes back to the placeholder option when the draft asks for it", () => {
+    const options = [opt("o_def", "Default Option", ["Default"]), opt("o_size", "Size", ["S", "M"])]
+    const variants = [cv("v0", { Size: "S", "Default Option": "Default" }), cv("v1", { Size: "M", "Default Option": "Default" })]
+    const body = {
+      options: [{ title: "Default Option", values: ["Default"] }],
+      variants: [{ options: { "Default Option": "Default" }, price: 7, inventory_quantity: 1 }],
+    }
+    const plan = planVariantSync(options, variants, draftOf(body))
+    expect(plan.removeOptionIds).toEqual(["o_size"])
+    expect(plan.deleteVariantIds).toEqual(["v0", "v1"])
+    expect(plan.reuseVariants).toEqual([])
+    expect(plan.createVariants.length).toBe(1)
+  })
+
+  it("keeps each variant on its own combination when the ids were swapped", () => {
+    const body = full()
+    body.variants[0] = { id: "v1", options: { Size: "M", Color: "Black" }, price: 1, inventory_quantity: 1 }
+    body.variants[2] = { id: "v3", options: { Size: "S", Color: "Black" }, price: 2, inventory_quantity: 2 }
+    const plan = planVariantSync(currentOptions, currentVariants, draftOf(body))
+    // v1 is S / Black and v3 is M / Black, whatever the ids in the request say
+    expect(plan.deleteVariantIds).toEqual([])
+    expect(plan.createVariants).toEqual([])
+    expect(plan.updateVariants.map((v) => v.id)).toEqual(["v2", "v4"])
+    expect(plan.reuseVariants.map((v) => [v.id, v.title, v.price])).toEqual([
+      ["v1", "S / Black", 2],
+      ["v3", "M / Black", 1],
+    ])
+  })
+
+  it("re-uses a variant for a combination whose id is not in the product any more", () => {
+    const body = full()
+    body.variants[0].id = "gone"
+    const plan = planVariantSync(currentOptions, currentVariants, draftOf(body))
+    expect(plan.deleteVariantIds).toEqual([])
+    expect(plan.createVariants).toEqual([])
+    expect(plan.reuseVariants.map((v) => [v.id, v.title])).toEqual([["v1", "S / Black"]])
+  })
+
+  it("finishes the job when an earlier save stopped half way", () => {
+    // the option was added but the variant was not moved to it yet
+    const options = [opt("o_def", "Default Option", ["Default"]), opt("o_size", "Size", ["S", "M"])]
+    const variants = [cv("v0", { "Default Option": "Default" })]
+    const body = {
+      options: [{ title: "Size", values: ["S", "M"] }],
+      variants: [
+        { options: { Size: "S" }, price: 30, inventory_quantity: 4 },
         { options: { Size: "M" }, price: 30, inventory_quantity: 4 },
       ],
     }
     const plan = planVariantSync(options, variants, draftOf(body))
-    expect(plan.deleteVariantIds).toEqual(["v0"])
-    expect(plan.removeOptionIds).toEqual(["o_def"])
-    expect(plan.addOptions).toEqual([{ title: "Size", values: ["S", "M"] }])
-    expect(plan.updateVariants).toEqual([])
-    expect(plan.createVariants.length).toBe(2)
-  })
-
-  it("does not keep a variant under an id that now stands for another combination", () => {
-    const body = full()
-    body.variants[0] = { id: "v1", options: { Size: "M", Color: "Black" }, price: 1, inventory_quantity: 1 }
-    body.variants[2] = { id: "v3", options: { Size: "S", Color: "Black" }, price: 1, inventory_quantity: 1 }
-    const plan = planVariantSync(currentOptions, currentVariants, draftOf(body))
-    expect(plan.deleteVariantIds.sort()).toEqual(["v1", "v3"])
-    expect(plan.createVariants.length).toBe(2)
-    expect(plan.updateVariants.map((v) => v.id)).toEqual(["v2", "v4"])
-  })
-
-  it("creates a variant whose id is not in the product any more", () => {
-    const body = full()
-    body.variants[0].id = "gone"
-    const plan = planVariantSync(currentOptions, currentVariants, draftOf(body))
-    expect(plan.deleteVariantIds).toEqual(["v1"])
-    expect(plan.createVariants.map((v) => v.title)).toEqual(["S / Black"])
-  })
-
-  it("finishes the job when an earlier save stopped half way", () => {
-    // the variants were deleted and the option added, but nothing was created
-    const options = [opt("o_def", "Default Option", ["Default"]), opt("o_size", "Size", ["S", "M"])]
-    const body = {
-      options: [{ title: "Size", values: ["S", "M"] }],
-      variants: [
-        { id: "v0", options: { Size: "S" }, price: 30, inventory_quantity: 4 },
-        { options: { Size: "M" }, price: 30, inventory_quantity: 4 },
-      ],
-    }
-    const plan = planVariantSync(options, [], draftOf(body))
-    expect(plan.removeOptionIds).toEqual(["o_def"])
+    expect(plan.removeOptionIds).toEqual([])
     expect(plan.addOptions).toEqual([])
     expect(plan.updateOptionValues).toEqual([])
-    expect(plan.createVariants.length).toBe(2)
+    expect(plan.deleteVariantIds).toEqual([])
+    expect(plan.reuseVariants.map((v) => v.id)).toEqual(["v0"])
+    expect(plan.createVariants.length).toBe(1)
   })
 
   it("uses the spelling the product already has", () => {

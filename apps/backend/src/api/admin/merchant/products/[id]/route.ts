@@ -211,6 +211,14 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       })
     } catch (variantsErr) {
       console.error("Failed to update variants:", variantsErr)
+      // Refused before anything was changed: saving again would not help, so it is not asked
+      const failure = (variantsErr ?? {}) as { type?: string; message?: string }
+      if (failure.type === MedusaError.Types.NOT_ALLOWED) {
+        throw new MedusaError(
+          MedusaError.Types.NOT_ALLOWED,
+          `The product details were saved, but the options and variants were not changed. ${failure.message}`
+        )
+      }
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
         partialSaveMessage("options and variants", variantsErr)
