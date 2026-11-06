@@ -13,6 +13,14 @@ import {
   MerchantCategory,
 } from '@/lib/medusa';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import VariantsEditor from './VariantsEditor';
+import {
+  singleVariantPayload,
+  validateVariants,
+  variantsFromProduct,
+  variantsPayload,
+  type VariantsState,
+} from '@/lib/variants';
 import { ArrowLeftIcon, TrashIcon, CheckIcon, UploadCloudIcon, PlusIcon } from '@/components/icons';
 
 interface ProductImageItem {
@@ -47,6 +55,10 @@ export default function ProductForm({
   const initialCategoryId = initialProduct?.categories?.[0]?.id || '';
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('10');
+  // Options and variants. The product is there from the first render in edit mode,
+  // so they start from it; `originalVariants` is what the product had when loaded.
+  const [originalVariants] = useState<VariantsState>(() => variantsFromProduct(initialProduct));
+  const [variants, setVariants] = useState<VariantsState>(originalVariants);
   const [status, setStatus] = useState<'Active' | 'Draft'>('Active');
 
   // Images state
@@ -181,6 +193,18 @@ export default function ProductForm({
     setMainImageId(id);
   };
 
+  // Turning options off leaves a single price: start from the first combination's
+  const handleVariantsChange = (next: VariantsState) => {
+    if (variants.enabled && !next.enabled && price.trim() === '') {
+      const first = variants.rows.find((r) => r.enabled);
+      if (first) {
+        setPrice(first.price);
+        setStock(first.stock);
+      }
+    }
+    setVariants(next);
+  };
+
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,11 +212,26 @@ export default function ProductForm({
       setError('Product name is required');
       return;
     }
+    const withOptions = variants.enabled;
     const numPrice = parseFloat(price);
-    if (isNaN(numPrice) || numPrice < 0) {
+    if (withOptions) {
+      const problem = validateVariants(variants);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    } else if (isNaN(numPrice) || numPrice < 0) {
       setError('Please provide a valid price');
       return;
     }
+    // What is sent for the price and stock: the table of combinations, or one
+    // price and stock (a product that had options and lost them goes back to a
+    // single variant, so that has to be said explicitly)
+    const priceFields = withOptions
+      ? variantsPayload(variants)
+      : originalVariants.enabled
+        ? singleVariantPayload(numPrice, parseInt(stock, 10) || 0)
+        : { price: numPrice, inventory_quantity: parseInt(stock, 10) || 0 };
 
     setSaving(true);
     setError(null);
@@ -209,8 +248,7 @@ export default function ProductForm({
           title: name.trim(),
           category_ids: categoryId ? [categoryId] : undefined,
           description: description.trim() || undefined,
-          price: numPrice,
-          inventory_quantity: parseInt(stock, 10) || 0,
+          ...priceFields,
           thumbnail: thumbnailUrl,
           images: imageUrls.length > 0 ? imageUrls : undefined,
           status: status === 'Active' ? 'published' : 'draft',
@@ -226,8 +264,7 @@ export default function ProductForm({
             ? { category_ids: categoryId ? [categoryId] : [] }
             : {}),
           description: description.trim() || undefined,
-          price: numPrice,
-          inventory_quantity: parseInt(stock, 10) || 0,
+          ...priceFields,
           thumbnail: thumbnailUrl || null,
           images: imageUrls,
           status: status === 'Active' ? 'published' : 'draft',
@@ -815,7 +852,8 @@ export default function ProductForm({
                 )}
               </section>
 
-              {/* Pricing and inventory section (NO SKU) */}
+              {/* Pricing and inventory section (NO SKU). With options, the table of combinations replaces it. */}
+              {!variants.enabled && (
               <section
                 style={{
                   boxSizing: 'border-box',
@@ -873,7 +911,7 @@ export default function ProductForm({
                         type="number"
                         min="0"
                         step="0.01"
-                        required
+                        required={!variants.enabled}
                         value={price}
                         onChange={(e) => setPrice(e.target.value)}
                         placeholder="0.00"
@@ -941,6 +979,15 @@ export default function ProductForm({
                   </div>
                 </div>
               </section>
+              )}
+
+              <VariantsEditor
+                value={variants}
+                onChange={handleVariantsChange}
+                original={originalVariants}
+                startPrice={price}
+                startStock={stock}
+              />
             </div>
 
             {/* RIGHT COLUMN */}

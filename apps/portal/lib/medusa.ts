@@ -81,6 +81,28 @@ export interface ProductVariant {
   title: string
   prices?: ProductPrice[]
   inventory_quantity?: number
+  // The value this variant has for each option (option_id says which option)
+  options?: { id?: string; value: string; option_id?: string }[]
+}
+
+// An option of a product (Size, Color...) with the values it can take
+export interface ProductOptionInfo {
+  id: string
+  title: string
+  values?: { id?: string; value: string }[]
+}
+
+// What a merchant sends to sell a product in several variants
+export interface VariantsInput {
+  options: { title: string; values: string[] }[]
+  variants: {
+    // Set for a variant that exists already
+    id?: string
+    // The value picked for each option, by option title
+    options: Record<string, string>
+    price: number
+    inventory_quantity: number
+  }[]
 }
 
 export interface MerchantProduct {
@@ -92,6 +114,7 @@ export interface MerchantProduct {
   thumbnail?: string | null
   status: "draft" | "proposed" | "published" | "rejected"
   variants?: ProductVariant[]
+  options?: ProductOptionInfo[]
   images?: { id: string; url: string }[]
   categories?: { id: string; name: string }[]
   created_at: string
@@ -362,12 +385,14 @@ export async function createMerchantProduct(data: {
   description?: string
   thumbnail?: string
   images?: string[]
-  price: number
+  // A product with a single variant has a price and stock. A product with options
+  // sends `options` and `variants` instead, each variant with its own price and stock.
+  price?: number
   currency_code?: string
   inventory_quantity?: number
   status?: "draft" | "published"
   category_ids?: string[]
-}): Promise<{ product: MerchantProduct }> {
+} & Partial<VariantsInput>): Promise<{ product: MerchantProduct }> {
   return apiFetch<{ product: MerchantProduct }>("/admin/merchant/products", {
     method: "POST",
     body: JSON.stringify(data),
@@ -394,7 +419,7 @@ export async function updateMerchantProduct(
     status?: "draft" | "published"
     // Replaces the product's categories. An empty array clears them.
     category_ids?: string[]
-  }
+  } & Partial<VariantsInput>
 ): Promise<{ product: MerchantProduct }> {
   return apiFetch<{ product: MerchantProduct }>(`/admin/merchant/products/${id}`, {
     method: "POST",

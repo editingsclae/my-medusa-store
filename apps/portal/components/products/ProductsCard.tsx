@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PRODUCTS_DATA, Product } from '../../lib/products';
 import { getMerchantProducts, deleteMerchantProduct, MerchantProduct } from '../../lib/medusa';
+import { summarizeVariants } from '../../lib/variants';
 import ProductRow from './ProductRow';
 import Pagination from './Pagination';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
@@ -68,12 +69,10 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
   // Convert live products or use fallback mock
   const displayProducts: Product[] = liveProducts !== null
     ? liveProducts.map((p) => {
-        const variant = p.variants?.[0];
-        const priceObj = variant?.prices?.[0];
-        const formattedPrice = priceObj
-          ? `${Number(priceObj.amount).toFixed(2)} ${priceObj.currency_code.toUpperCase()}`
-          : 'N/A';
-        const stockQty = variant?.inventory_quantity !== undefined ? String(variant.inventory_quantity) : '0';
+        // Several variants: the lowest to the highest price, and the stock of all of them
+        const summary = summarizeVariants(p.variants || []);
+        const formattedPrice = summary.price;
+        const stockQty = summary.stock;
 
         return {
           id: p.id,
