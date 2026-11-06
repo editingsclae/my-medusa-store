@@ -3,6 +3,7 @@ import {
   MAX_CATEGORY_TILES,
   MAX_HERO_SLIDES,
   MAX_LABEL_LENGTH,
+  DEFAULT_PROMO_BANNERS,
   MAX_PROMO_BANNERS,
   MAX_TEXT_LENGTH,
   MAX_TITLE_LENGTH,
@@ -167,18 +168,45 @@ describe("parseStorefrontContent", () => {
 
   it("accepts the maximum number of slides and promo banners", () => {
     const slides = Array.from({ length: MAX_HERO_SLIDES }, () => slide())
-    const promos = Array.from({ length: MAX_PROMO_BANNERS }, () => slide())
+    const promos = Array.from({ length: DEFAULT_PROMO_BANNERS }, () => slide())
     const result: any = parse({ hero_slides: slides, promo_banners: promos })
     expect(result.ok).toBe(true)
     expect(result.value.hero_slides).toHaveLength(MAX_HERO_SLIDES)
-    expect(result.value.promo_banners).toHaveLength(MAX_PROMO_BANNERS)
+    expect(result.value.promo_banners).toHaveLength(DEFAULT_PROMO_BANNERS)
   })
 
   it("refuses too many slides or promo banners", () => {
     const slides = Array.from({ length: MAX_HERO_SLIDES + 1 }, () => slide())
-    const promos = Array.from({ length: MAX_PROMO_BANNERS + 1 }, () => slide())
+    const promos = Array.from({ length: DEFAULT_PROMO_BANNERS + 1 }, () => slide())
     expect(parse({ hero_slides: slides }).ok).toBe(false)
     expect(parse({ promo_banners: promos }).ok).toBe(false)
+  })
+
+  it("allows as many promo banners as the storefront declared", () => {
+    const five = Array.from({ length: 5 }, () => slide())
+    const ok: any = parseStorefrontContent({ promo_banners: five }, emptyContent(), { promo_banners: 5 })
+    expect(ok.ok).toBe(true)
+    expect(ok.value.promo_banners).toHaveLength(5)
+    const tooMany: any = parseStorefrontContent({ promo_banners: [...five, slide()] }, emptyContent(), { promo_banners: 5 })
+    expect(tooMany.ok).toBe(false)
+    expect(tooMany.error).toBe("At most 5 promo banners are allowed")
+  })
+
+  it("never allows more than the highest number a store can declare", () => {
+    const many = Array.from({ length: MAX_PROMO_BANNERS + 1 }, () => slide())
+    expect(parseStorefrontContent({ promo_banners: many }, emptyContent(), { promo_banners: 99 }).ok).toBe(false)
+  })
+
+  it("says so when the storefront has no place for promo banners", () => {
+    const none: any = parseStorefrontContent({ promo_banners: [slide()] }, emptyContent(), { promo_banners: 0 })
+    expect(none.ok).toBe(false)
+    expect(none.error).toBe("Your store has no place for promo banners")
+    expect(parseStorefrontContent({ promo_banners: [] }, emptyContent(), { promo_banners: 0 }).ok).toBe(true)
+  })
+
+  it("speaks of one promo banner in the singular", () => {
+    const result: any = parseStorefrontContent({ promo_banners: [slide(), slide()] }, emptyContent(), { promo_banners: 1 })
+    expect(result.error).toBe("At most 1 promo banner is allowed")
   })
 
   it("refuses a banner without an image and says which one", () => {
@@ -286,10 +314,29 @@ describe("readStoredContent", () => {
   })
 
   it("never returns more than the maximum", () => {
-    const many = Array.from({ length: 10 }, (_, i) => slide({ id: `s${i}` }))
+    const many = Array.from({ length: 20 }, (_, i) => slide({ id: `s${i}` }))
     const read = readStoredContent({ storefront: { hero_slides: many, promo_banners: many } })
     expect(read.hero_slides).toHaveLength(MAX_HERO_SLIDES)
     expect(read.promo_banners).toHaveLength(MAX_PROMO_BANNERS)
+  })
+})
+
+describe("toPublicContent with a limit", () => {
+  it("sends only as many promo banners as the storefront has room for", () => {
+    const banners = Array.from({ length: 5 }, (_, i) => slide({ id: `p${i}` }))
+    const saved: any = parseStorefrontContent({ promo_banners: banners }, emptyContent(), { promo_banners: 5 })
+    expect(toPublicContent(saved.value, { promo_banners: 3 }).promo_banners.map((b: any) => b.id)).toEqual(["p0", "p1", "p2"])
+    expect(toPublicContent(saved.value, { promo_banners: 5 }).promo_banners).toHaveLength(5)
+    expect(toPublicContent(saved.value, { promo_banners: 0 }).promo_banners).toHaveLength(0)
+  })
+
+  it("counts only banners that are switched on", () => {
+    const saved: any = parseStorefrontContent(
+      { promo_banners: [slide({ id: "a", enabled: false }), slide({ id: "b" }), slide({ id: "c" })] },
+      emptyContent(),
+      { promo_banners: 3 }
+    )
+    expect(toPublicContent(saved.value, { promo_banners: 2 }).promo_banners.map((b: any) => b.id)).toEqual(["b", "c"])
   })
 })
 

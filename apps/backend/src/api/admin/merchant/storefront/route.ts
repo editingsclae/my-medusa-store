@@ -3,36 +3,48 @@ import { MedusaError } from "@medusajs/framework/utils"
 import { getMerchantContext } from "../utils"
 import { assertCategoriesOwned, requireSalesChannelId } from "../category-access"
 import { loadStorefrontContent, saveStorefrontContent } from "../storefront-access"
+import { loadLayout } from "../storefront-layout-access"
+import type { StorefrontLayout } from "../../../storefront-layout"
 import {
   MAX_BUTTON_LENGTH,
   MAX_CATEGORY_TILES,
   MAX_HERO_SLIDES,
   MAX_LABEL_LENGTH,
-  MAX_PROMO_BANNERS,
   MAX_TEXT_LENGTH,
   MAX_TITLE_LENGTH,
   parseStorefrontContent,
 } from "../../../storefront-content"
 
-const LIMITS = {
+// promo_banners is the number of places the merchant's storefront has
+const limitsFor = (promoBanners: number) => ({
   hero_slides: MAX_HERO_SLIDES,
-  promo_banners: MAX_PROMO_BANNERS,
+  promo_banners: promoBanners,
   category_tiles: MAX_CATEGORY_TILES,
   label: MAX_LABEL_LENGTH,
   title: MAX_TITLE_LENGTH,
   text: MAX_TEXT_LENGTH,
   button_label: MAX_BUTTON_LENGTH,
-}
+})
+
+// What the portal shows about the storefront's layout
+const layoutInfo = (layout: StorefrontLayout, keySet: boolean) => ({
+  promo_banners: layout.promo_banners,
+  declared: layout.declared_at !== undefined,
+  declared_at: layout.declared_at ?? null,
+  key_set: keySet,
+})
 
 // GET /admin/merchant/storefront
 // The merchant's banners (including the ones that are switched off) and
-// category tiles.
+// category tiles, the limits (the number of promo banners is the one the
+// storefront declared) and the storefront's layout.
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
   const salesChannelId = requireSalesChannelId(context)
 
   const storefront = await loadStorefrontContent(req.scope, salesChannelId)
-  res.json({ storefront, limits: LIMITS })
+  const { layout, keySet } = await loadLayout(req.scope, salesChannelId)
+  res.json({ storefront, limits: limitsFor(layout.promo_banners), layout: layoutInfo(layout, keySet) })
 }
 
 // POST /admin/merchant/storefront
@@ -46,7 +58,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const salesChannelId = requireSalesChannelId(context)
 
   const stored = await loadStorefrontContent(req.scope, salesChannelId)
-  const parsed = parseStorefrontContent(req.body, stored)
+  const { layout, keySet } = await loadLayout(req.scope, salesChannelId)
+  const parsed = parseStorefrontContent(req.body, stored, { promo_banners: layout.promo_banners })
   if (!parsed.ok) {
     throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.error)
   }
@@ -61,5 +74,5 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   // Read it back so the answer shows what is really stored
   const storefront = await loadStorefrontContent(req.scope, salesChannelId)
-  res.json({ storefront, limits: LIMITS })
+  res.json({ storefront, limits: limitsFor(layout.promo_banners), layout: layoutInfo(layout, keySet) })
 }

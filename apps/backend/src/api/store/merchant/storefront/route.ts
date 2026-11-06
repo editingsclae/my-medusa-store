@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { listCategoryLinks } from "../../../admin/merchant/category-access"
 import { loadStorefrontContent } from "../../../admin/merchant/storefront-access"
+import { loadLayout } from "../../../admin/merchant/storefront-layout-access"
 import { buildStoreCategories } from "../../../store-categories"
 import { publicCategoryTiles, toPublicContent } from "../../../storefront-content"
 import { salesChannelIdsFromKey } from "../../../store-key"
@@ -12,7 +13,8 @@ import { salesChannelIdsFromKey } from "../../../store-key"
  * What the merchant whose publishable key is on the request shows on its
  * landing page:
  *   hero_slides     up to 3, only the ones that are switched on
- *   promo_banners   up to 2, only the ones that are switched on
+ *   promo_banners   only the ones that are switched on, at most as many as the
+ *                   storefront declared with PUT /store/merchant/storefront/layout (2 until it does)
  *   category_tiles  up to 8 categories with a picture, in the merchant's order
  *
  * A banner is { id, image_url, label, title, text, button_label, link } where
@@ -25,7 +27,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const channelIds = salesChannelIdsFromKey(req)
   const content = await loadStorefrontContent(req.scope, channelIds[0])
 
-  const { hero_slides, promo_banners } = toPublicContent(content)
+  const { layout } = await loadLayout(req.scope, channelIds[0])
+  const { hero_slides, promo_banners } = toPublicContent(content, { promo_banners: layout.promo_banners })
 
   let category_tiles: ReturnType<typeof publicCategoryTiles> = []
   if (content.category_tiles.length > 0) {

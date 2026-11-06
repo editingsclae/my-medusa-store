@@ -1,5 +1,5 @@
 // What a merchant shows on the landing page of its storefront: up to 3 hero
-// slides, up to 2 promo banners and up to 8 category tiles (a category with its
+// slides, promo banners (as many as the storefront has room for) and up to 8 category tiles (a category with its
 // own picture). They are kept in the metadata of the merchant's sales channel
 // (key "storefront"). No framework imports, so the rules can be unit tested on
 // their own.
@@ -11,7 +11,10 @@
 export const STOREFRONT_METADATA_KEY = "storefront"
 
 export const MAX_HERO_SLIDES = 3
-export const MAX_PROMO_BANNERS = 2
+// A store has 2 promo banner places until its storefront says otherwise (see
+// storefront-layout.ts). MAX_PROMO_BANNERS is the most any store may declare.
+export const DEFAULT_PROMO_BANNERS = 2
+export const MAX_PROMO_BANNERS = 12
 export const MAX_CATEGORY_TILES = 8
 
 export const MAX_LABEL_LENGTH = 40
@@ -229,10 +232,17 @@ function parseTile(
 // "category_tiles" may be left out. Then the tiles that are already stored stay
 // as they are (`current`), so a portal page that was opened before tiles existed
 // cannot wipe them by saving.
+export type ContentLimits = { promo_banners: number }
+
 export function parseStorefrontContent(
   input: unknown,
-  current: StorefrontContent = emptyContent()
+  current: StorefrontContent = emptyContent(),
+  limits: ContentLimits = { promo_banners: DEFAULT_PROMO_BANNERS }
 ): ParseResult {
+  const maxItems: Record<Section, number> = {
+    hero_slides: MAX_HERO_SLIDES,
+    promo_banners: Math.min(limits.promo_banners, MAX_PROMO_BANNERS),
+  }
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     return { ok: false, error: "Send the banners as an object" }
   }
@@ -244,10 +254,13 @@ export function parseStorefrontContent(
     if (!Array.isArray(list)) {
       return { ok: false, error: `${section} must be a list` }
     }
-    if (list.length > MAX_ITEMS[section]) {
+    if (list.length > maxItems[section]) {
       return {
         ok: false,
-        error: `At most ${MAX_ITEMS[section]} ${SECTION_NAMES[section].toLowerCase()}s are allowed`,
+        error:
+          maxItems[section] === 0
+            ? `Your store has no place for ${SECTION_NAMES[section].toLowerCase()}s`
+            : `At most ${maxItems[section]} ${SECTION_NAMES[section].toLowerCase()}${maxItems[section] === 1 ? "" : "s"} ${maxItems[section] === 1 ? "is" : "are"} allowed`,
       }
     }
 
@@ -330,11 +343,13 @@ export function readStoredContent(metadata: unknown): StorefrontContent {
 // What a storefront receives: only the banners that are switched on. Tiles are
 // added separately with publicCategoryTiles, because they need the categories.
 export function toPublicContent(
-  content: StorefrontContent
+  content: StorefrontContent,
+  limits: ContentLimits = { promo_banners: DEFAULT_PROMO_BANNERS }
 ): Pick<StorefrontContent, "hero_slides" | "promo_banners"> {
   return {
     hero_slides: content.hero_slides.filter((b) => b.enabled),
-    promo_banners: content.promo_banners.filter((b) => b.enabled),
+    // More banners than the storefront has room for are never sent
+    promo_banners: content.promo_banners.filter((b) => b.enabled).slice(0, limits.promo_banners),
   }
 }
 
