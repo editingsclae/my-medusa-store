@@ -14,10 +14,12 @@ import {
   StorefrontBanner,
   StorefrontCategoryTile,
   StorefrontContent,
+  StorefrontLayoutInfo,
   StorefrontLimits,
 } from '@/lib/medusa';
 import { CollapsibleRow, RowBadge } from '@/components/settings/CollapsibleRow';
 import { SaveBar } from '@/components/settings/SaveBar';
+import LayoutKeyCard from '@/components/settings/LayoutKeyCard';
 import { SettingsTabs, panelProps } from '@/components/settings/SettingsTabs';
 import {
   cardStyle,
@@ -64,7 +66,7 @@ const SECTION_INFO: Record<
   },
   promo_banners: {
     heading: 'Promo banners',
-    description: 'Up to 2 banners shown side by side near the bottom of your home page.',
+    description: 'Banners shown on your home page, usually near the bottom.',
     itemName: 'Promo banner',
     labelName: 'Collection name (for example "Electronics")',
     imageTip: 'Best size 800 × 300 px. Keep the main subject on the right side: the text appears on the left.',
@@ -568,6 +570,8 @@ export default function AppearanceSettingsPage() {
   });
   const [savedJson, setSavedJson] = useState('');
   const [limits, setLimits] = useState<StorefrontLimits>(DEFAULT_LIMITS);
+  // What the storefront declared about its layout (null until loaded)
+  const [layout, setLayout] = useState<StorefrontLayoutInfo | null>(null);
   // null until the list is loaded
   const [categories, setCategories] = useState<MerchantCategory[] | null>(null);
   const [categoriesFailed, setCategoriesFailed] = useState(false);
@@ -590,6 +594,7 @@ export default function AppearanceSettingsPage() {
       setContent(res.storefront);
       setSavedJson(JSON.stringify(res.storefront));
       setLimits({ ...DEFAULT_LIMITS, ...res.limits });
+      setLayout(res.layout ?? null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load your store appearance.');
     } finally {
@@ -820,6 +825,22 @@ export default function AppearanceSettingsPage() {
         </h2>
         <p style={sectionHintStyle}>{info.description}</p>
 
+        {section === 'promo_banners' && (
+          <p style={messageBox('muted')} data-testid="promo-places">
+            {max === 0
+              ? 'Your storefront has no place for promo banners.'
+              : layout?.declared === false
+                ? `Your storefront has not said yet how many promo banners it has, so ${max} places are available.`
+                : `Your storefront has ${max} promo banner ${max === 1 ? 'place' : 'places'}.`}
+          </p>
+        )}
+        {section === 'promo_banners' && list.length > max && (
+          <p role="alert" style={messageBox('error')}>
+            You have {list.length} promo banners but your storefront has room for {max}. Only the first {max} that are
+            switched on are shown. Remove {list.length - max} to be able to save.
+          </p>
+        )}
+
         {list.length === 0 ? (
           <p style={messageBox('muted')}>
             {section === 'hero_slides'
@@ -850,11 +871,17 @@ export default function AppearanceSettingsPage() {
           </ul>
         )}
 
-        {addButton(
-          list.length >= max ? `Maximum of ${max} reached` : `Add ${info.itemName.toLowerCase()}`,
-          list.length >= max,
-          () => addBanner(section)
-        )}
+        {!(section === 'promo_banners' && max === 0) &&
+          addButton(
+            list.length >= max ? `Maximum of ${max} reached` : `Add ${info.itemName.toLowerCase()}`,
+            list.length >= max,
+            () => addBanner(section)
+          )}
+
+        {section === 'promo_banners' && <LayoutKeyCard
+            layout={layout}
+            onKeyCreated={() => setLayout((prev) => (prev ? { ...prev, key_set: true } : prev))}
+          />}
       </div>
     );
   };

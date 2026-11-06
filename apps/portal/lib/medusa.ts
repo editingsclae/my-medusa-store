@@ -738,9 +738,24 @@ export interface StorefrontLimits {
   button_label: number
 }
 
+// What the storefront declared about its layout. Until it does, promo_banners
+// is the default (2) and declared is false.
+export interface StorefrontLayoutInfo {
+  promo_banners: number
+  declared: boolean
+  declared_at: string | null
+  key_set: boolean
+}
+
 export interface StorefrontResponse {
   storefront: StorefrontContent
   limits: StorefrontLimits
+  layout?: StorefrontLayoutInfo
+}
+
+// Creates a layout key for the storefront. It is returned once; an older key stops working.
+export async function createLayoutKey(): Promise<{ layout_key: string }> {
+  return apiFetch<{ layout_key: string }>("/admin/merchant/storefront/layout-key", { method: "POST" })
 }
 
 export async function getStorefrontContent(): Promise<StorefrontResponse> {
