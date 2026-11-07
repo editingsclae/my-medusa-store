@@ -14,6 +14,8 @@ import {
 } from '@/lib/medusa';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import VariantsEditor from './VariantsEditor';
+import BadgePicker from './BadgePicker';
+import { badgeFromProduct } from '@/lib/badge';
 import {
   singleVariantPayload,
   validateVariants,
@@ -60,6 +62,9 @@ export default function ProductForm({
   const [originalVariants] = useState<VariantsState>(() => variantsFromProduct(initialProduct));
   const [variants, setVariants] = useState<VariantsState>(originalVariants);
   const [status, setStatus] = useState<'Active' | 'Draft'>('Active');
+  // The badge on the product card; `initialBadge` is what the product had when loaded
+  const [initialBadge] = useState(() => badgeFromProduct(initialProduct));
+  const [badge, setBadge] = useState(initialBadge);
 
   // Images state
   const [images, setImages] = useState<ProductImageItem[]>([]);
@@ -248,6 +253,7 @@ export default function ProductForm({
           title: name.trim(),
           category_ids: categoryId ? [categoryId] : undefined,
           description: description.trim() || undefined,
+          ...(badge.trim() !== '' ? { badge: badge.trim() } : {}),
           ...priceFields,
           thumbnail: thumbnailUrl,
           images: imageUrls.length > 0 ? imageUrls : undefined,
@@ -264,6 +270,8 @@ export default function ProductForm({
             ? { category_ids: categoryId ? [categoryId] : [] }
             : {}),
           description: description.trim() || undefined,
+          // Only sent when it changed; an empty text removes the badge
+          ...(badge.trim() !== initialBadge ? { badge: badge.trim() } : {}),
           ...priceFields,
           thumbnail: thumbnailUrl || null,
           images: imageUrls,
@@ -1232,6 +1240,8 @@ export default function ProductForm({
                   )}
                 </div>
               </section>
+
+              <BadgePicker value={badge} onChange={setBadge} />
 
               {/* Delete Product Section (in Edit mode only) */}
               {mode === 'edit' && productId && (

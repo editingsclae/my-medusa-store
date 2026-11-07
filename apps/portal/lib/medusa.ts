@@ -117,6 +117,8 @@ export interface MerchantProduct {
   options?: ProductOptionInfo[]
   images?: { id: string; url: string }[]
   categories?: { id: string; name: string }[]
+  // Holds the badge shown on the product card (metadata.badge)
+  metadata?: Record<string, unknown> | null
   created_at: string
 }
 
@@ -392,6 +394,8 @@ export async function createMerchantProduct(data: {
   inventory_quantity?: number
   status?: "draft" | "published"
   category_ids?: string[]
+  // The badge on the product card ("New", "Sale"...), at most 16 characters
+  badge?: string
 } & Partial<VariantsInput>): Promise<{ product: MerchantProduct }> {
   return apiFetch<{ product: MerchantProduct }>("/admin/merchant/products", {
     method: "POST",
@@ -419,6 +423,8 @@ export async function updateMerchantProduct(
     status?: "draft" | "published"
     // Replaces the product's categories. An empty array clears them.
     category_ids?: string[]
+    // The badge on the product card; an empty text removes it
+    badge?: string
   } & Partial<VariantsInput>
 ): Promise<{ product: MerchantProduct }> {
   return apiFetch<{ product: MerchantProduct }>(`/admin/merchant/products/${id}`, {
