@@ -9,6 +9,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { DEFAULT_PROMO_BANNERS, MAX_PROMO_BANNERS } from "./storefront-content"
+import { parseSectionDeclarations, readStoredDeclarations, type SectionDeclaration } from "./storefront-sections"
 
 export const LAYOUT_METADATA_KEY = "storefront_layout"
 export const LAYOUT_KEY_HASH_KEY = "storefront_layout_key_hash"
@@ -17,11 +18,16 @@ export const LAYOUT_KEY_HEADER = "x-layout-key"
 export type StorefrontLayout = {
   // Places for promo banners; 0 means the storefront has none
   promo_banners: number
+  // The product sections of the home page, in order, with how many products each
+  // shows; missing until the storefront declares them
+  sections?: SectionDeclaration[]
   // When the storefront said so; missing while the default applies
   declared_at?: string
 }
 
-export type LayoutParse = { ok: true; value: { promo_banners: number } } | { ok: false; error: string }
+export type LayoutParse =
+  | { ok: true; value: { promo_banners: number; sections?: SectionDeclaration[] } }
+  | { ok: false; error: string }
 
 export function parseLayout(input: unknown): LayoutParse {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
@@ -34,7 +40,13 @@ export function parseLayout(input: unknown): LayoutParse {
       error: `promo_banners must be a whole number from 0 to ${MAX_PROMO_BANNERS}`,
     }
   }
-  return { ok: true, value: { promo_banners: count } }
+
+  // Product sections are optional: a storefront that does not send them keeps what it declared before
+  const sections = (input as Record<string, unknown>).sections
+  if (sections === undefined) return { ok: true, value: { promo_banners: count } }
+  const parsedSections = parseSectionDeclarations(sections)
+  if (!parsedSections.ok) return { ok: false, error: parsedSections.error }
+  return { ok: true, value: { promo_banners: count, sections: parsedSections.value } }
 }
 
 // What is stored; a damaged entry falls back to the default instead of failing
@@ -46,8 +58,10 @@ export function readStoredLayout(metadata: unknown): StorefrontLayout {
   const raw = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {}
   const parsed = parseLayout(raw)
   if (!parsed.ok) return { promo_banners: DEFAULT_PROMO_BANNERS }
+  const sections = readStoredDeclarations(raw.sections)
   return {
     promo_banners: parsed.value.promo_banners,
+    ...(sections.length > 0 ? { sections } : {}),
     ...(typeof raw.declared_at === "string" ? { declared_at: raw.declared_at } : {}),
   }
 }
