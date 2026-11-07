@@ -758,6 +758,39 @@ export async function createLayoutKey(): Promise<{ layout_key: string }> {
   return apiFetch<{ layout_key: string }>("/admin/merchant/storefront/layout-key", { method: "POST" })
 }
 
+// The product sections of the home page (New Arrivals, Best Sellers, Trending Now,
+// Featured Products). The storefront declares which it has and how many products
+// each shows; the merchant switches them, renames them and chooses the featured products.
+export type HomeSectionKey = "new_arrivals" | "best_sellers" | "trending" | "featured"
+
+export interface HomeSectionSetting {
+  enabled: boolean
+  title: string
+}
+
+export interface HomeSectionsSettings {
+  sections: Record<HomeSectionKey, HomeSectionSetting>
+  featured_ids: string[]
+}
+
+export interface HomeSectionsResponse {
+  settings: HomeSectionsSettings
+  // In the order of the storefront's home page; empty until it declares them
+  declared: Array<{ key: HomeSectionKey; count: number; default_title: string }>
+  windows: { best_sellers_days: number; trending_days: number }
+}
+
+export async function getHomeSections(): Promise<HomeSectionsResponse> {
+  return apiFetch<HomeSectionsResponse>("/admin/merchant/storefront-sections")
+}
+
+export async function saveHomeSections(settings: HomeSectionsSettings): Promise<HomeSectionsResponse> {
+  return apiFetch<HomeSectionsResponse>("/admin/merchant/storefront-sections", {
+    method: "POST",
+    body: JSON.stringify(settings),
+  })
+}
+
 export async function getStorefrontContent(): Promise<StorefrontResponse> {
   return apiFetch<StorefrontResponse>("/admin/merchant/storefront")
 }

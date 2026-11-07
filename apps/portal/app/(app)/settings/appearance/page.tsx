@@ -21,6 +21,7 @@ import { CollapsibleRow, RowBadge } from '@/components/settings/CollapsibleRow';
 import { SaveBar } from '@/components/settings/SaveBar';
 import LayoutKeyCard from '@/components/settings/LayoutKeyCard';
 import { SettingsTabs, panelProps } from '@/components/settings/SettingsTabs';
+import HomeSectionsCard from '@/components/settings/HomeSectionsCard';
 import {
   cardStyle,
   dangerSmallButton,
@@ -34,7 +35,7 @@ import {
 } from '@/components/settings/styles';
 
 type Section = 'hero_slides' | 'promo_banners';
-type Tab = Section | 'category_tiles';
+type Tab = Section | 'category_tiles' | 'home_sections';
 
 // Where a problem is, so the page can open it for the merchant
 type Problem = { message: string; tab: Tab; id: string };
@@ -986,20 +987,25 @@ export default function AppearanceSettingsPage() {
               label: 'Promo banners',
               badge: `${content.promo_banners.length} / ${limits.promo_banners}`,
             },
+            { id: 'home_sections', label: 'Product sections' },
           ]}
         />
         {tab === 'hero_slides' && renderBannerSection('hero_slides')}
         {tab === 'category_tiles' && renderTilesSection()}
         {tab === 'promo_banners' && renderBannerSection('promo_banners')}
+        {tab === 'home_sections' && <HomeSectionsCard products={products} />}
       </section>
 
-      <SaveBar
-        dirty={dirty}
-        saving={saving}
-        busyText={uploadingId !== null ? 'Uploading an image...' : null}
-        message={message}
-        onSave={handleSave}
-      />
+      {/* The product sections have their own Save button; this bar stays for the banners and tiles */}
+      {(tab !== 'home_sections' || dirty) && (
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          busyText={uploadingId !== null ? 'Uploading an image...' : null}
+          message={message}
+          onSave={handleSave}
+        />
+      )}
     </div>
   );
 }
