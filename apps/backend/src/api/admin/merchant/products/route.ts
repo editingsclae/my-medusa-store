@@ -8,6 +8,7 @@ import { setInitialVariantStock } from "../product-variants"
 import { hasVariantsDraft, parseVariantsDraft, variantTitle, type VariantsDraft } from "../variant-rules"
 import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
 import { getDefaultShippingProfileId } from "../fulfillment"
+import { parseBadge, withBadge } from "../../../product-badge"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -49,6 +50,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "images.*",
       "created_at",
       "updated_at",
+      "metadata",
       "sales_channels.id",
       "sales_channels.name",
       "categories.id",
@@ -144,6 +146,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     draft = parsed.value
   }
 
+  // The badge on the product card ("New", "Sale"...), checked before anything is created
+  const badge = parseBadge(body.badge)
+  if (!badge.ok) {
+    throw new MedusaError(MedusaError.Types.INVALID_DATA, badge.message)
+  }
+
   // New products start with 10 in stock unless the merchant says otherwise
   const stockInput = parseStock(body.inventory_quantity !== undefined ? body.inventory_quantity : 10)
   if (!stockInput.ok && !draft) {
@@ -170,6 +178,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       },
     ],
     ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
+    ...(badge.value !== "" ? { metadata: withBadge(undefined, badge.value) } : {}),
     options: draft
       ? draft.options.map((o) => ({ title: o.title, values: o.values }))
       : [{ title: "Default Option", values: ["Default"] }],

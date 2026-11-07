@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { updateProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../utils"
+import { parseBadge, withBadge } from "../../../../product-badge"
 import { parsePrice, parseStock, partialSaveMessage } from "../../product-inputs"
 import { setVariantStock, updateVariantPrice } from "../../product-stock"
 import { applyVariantPlan, planFor, VARIANT_FIELDS } from "../../product-variants"
@@ -30,6 +31,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "images.*",
       "created_at",
       "updated_at",
+      "metadata",
       "sales_channels.id",
       "sales_channels.name",
       "categories.id",
@@ -109,6 +111,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     fields: [
       "id",
       "title",
+      "metadata",
       "sales_channels.id",
       "variants.id",
       "variants.prices.*",
@@ -165,7 +168,19 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     newStock = parsed.value
   }
 
+  // The badge on the product card: empty or null removes it. The rest of the
+  // product's metadata stays as it is.
+  let newBadge: string | null = null
+  if (body.badge !== undefined) {
+    const parsed = parseBadge(body.badge)
+    if (!parsed.ok) {
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, parsed.message)
+    }
+    newBadge = parsed.value
+  }
+
   const updateData: any = {}
+  if (newBadge !== null) updateData.metadata = withBadge((product as any).metadata, newBadge)
 
   // category_ids replaces the product's categories, so every id must be one of
   // this merchant's own. Sending an empty array clears them.
