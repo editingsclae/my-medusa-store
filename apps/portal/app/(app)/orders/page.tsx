@@ -30,7 +30,14 @@ const TONES: Record<'green' | 'blue' | 'amber' | 'gray', StatusTone> = {
   gray:  { fg: '#4B5563', bd: '#D5D9E0', bg: '#F3F4F6', dot: '#9CA3AF' },
 };
 
-function getPaymentBadgeInfo(paymentStatus?: string): { label: string; tone: StatusTone } {
+function getPaymentBadgeInfo(
+  paymentStatus?: string,
+  orderStatus?: string
+): { label: string; tone: StatusTone } {
+  // A canceled order never shows as Authorized/Captured, whatever the payment record says.
+  if ((orderStatus || '').toLowerCase() === 'canceled') {
+    return { label: 'Canceled', tone: TONES.gray };
+  }
   const s = (paymentStatus || 'authorized').toLowerCase();
   if (s === 'captured' || s === 'completed' || s === 'paid') {
     return { label: 'Captured', tone: TONES.green };
@@ -403,9 +410,9 @@ export default function OrdersPage() {
       Boolean(firstPayment?.captured_at) ||
       allPayments.some((p) => (p.captures && p.captures.length > 0));
 
-    const payInfo = isPaymentCaptured
+    const payInfo = o.status !== 'canceled' && isPaymentCaptured
       ? { label: 'Captured', tone: TONES.green }
-      : getPaymentBadgeInfo(o.payment_status);
+      : getPaymentBadgeInfo(o.payment_status, o.status);
 
     const cur = o.currency_code || '';
     const items = o.items || [];
@@ -2034,7 +2041,7 @@ export default function OrdersPage() {
                     const fulInfo = order.status === 'canceled'
                       ? { label: 'Canceled', tone: TONES.gray }
                       : getFulfillmentBadgeInfo(stage);
-                    const payInfo = getPaymentBadgeInfo(order.payment_status);
+                    const payInfo = getPaymentBadgeInfo(order.payment_status, order.status);
 
                     const orderNo = `#${order.display_id || order.id.slice(-6)}`;
                     const orderDate = new Date(order.created_at).toLocaleDateString('en-US', {

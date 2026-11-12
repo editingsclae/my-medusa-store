@@ -7,7 +7,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
   const filters: Record<string, any> = {
-    status: { $nin: ["draft"] },
+    // Canceled orders are not sales: leave them out of revenue, order counts,
+    // the daily chart and top products.
+    status: { $nin: ["draft", "canceled"] },
   }
 
   if (context.salesChannelId) {
