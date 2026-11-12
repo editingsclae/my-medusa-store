@@ -24,6 +24,8 @@ import {
   type VariantsState,
 } from '@/lib/variants';
 import { ArrowLeftIcon, TrashIcon, CheckIcon, UploadCloudIcon, PlusIcon } from '@/components/icons';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useMerchant } from '@/components/layout/MerchantContext';
 
 interface ProductImageItem {
   id: string;
@@ -46,6 +48,8 @@ export default function ProductForm({
   onCancel,
 }: ProductFormProps) {
   const router = useRouter();
+  const { profile, loading: merchantLoading } = useMerchant();
+  const currencyCode = profile?.currency_code?.toUpperCase() || '';
 
   // Form states
   const [name, setName] = useState('');
@@ -56,7 +60,7 @@ export default function ProductForm({
   const [categoryId, setCategoryId] = useState('');
   const initialCategoryId = initialProduct?.categories?.[0]?.id || '';
   const [price, setPrice] = useState('');
-  const [stock, setStock] = useState('10');
+  const [stock, setStock] = useState('0');
   // Options and variants. The product is there from the first render in edit mode,
   // so they start from it; `originalVariants` is what the product had when loaded.
   const [originalVariants] = useState<VariantsState>(() => variantsFromProduct(initialProduct));
@@ -111,7 +115,7 @@ export default function ProductForm({
       const variant = initialProduct.variants?.[0];
       const p = variant?.prices?.[0];
       setPrice(p?.amount !== undefined ? String(p.amount) : '');
-      setStock(variant?.inventory_quantity !== undefined ? String(variant.inventory_quantity) : '10');
+      setStock(variant?.inventory_quantity !== undefined ? String(variant.inventory_quantity) : '0');
 
       setStatus(initialProduct.status === 'published' ? 'Active' : 'Draft');
 
@@ -911,9 +915,13 @@ export default function ProductForm({
                         background: '#FFFFFF',
                       }}
                     >
-                      <span style={{ fontSize: '15px', fontWeight: 600, color: '#4B5263' }}>
-                        TND
-                      </span>
+                      {merchantLoading && !currencyCode ? (
+                        <Skeleton width={32} height={16} radius={4} />
+                      ) : currencyCode ? (
+                        <span style={{ fontSize: '15px', fontWeight: 600, color: '#4B5263' }}>
+                          {currencyCode}
+                        </span>
+                      ) : null}
                       <input
                         id="p-price"
                         type="number"
@@ -995,6 +1003,7 @@ export default function ProductForm({
                 original={originalVariants}
                 startPrice={price}
                 startStock={stock}
+                currency={currencyCode}
               />
             </div>
 
@@ -1176,60 +1185,64 @@ export default function ProductForm({
                   >
                     Product category
                   </label>
-                  <div
-                    style={{
-                      position: 'relative',
-                      boxSizing: 'border-box',
-                      height: '48px',
-                      border: '1px solid #E6E8EC',
-                      borderRadius: '24px',
-                      background: '#FFFFFF',
-                    }}
-                  >
-                    <select
-                      id="p-category"
-                      value={categoryId}
-                      onChange={(e) => setCategoryId(e.target.value)}
+                  {!categoriesLoaded ? (
+                    <Skeleton width="100%" height={48} radius={24} />
+                  ) : (
+                    <div
                       style={{
-                        appearance: 'none',
-                        WebkitAppearance: 'none',
-                        display: 'block',
-                        width: '100%',
-                        height: '100%',
+                        position: 'relative',
                         boxSizing: 'border-box',
-                        padding: '0 44px 0 17px',
-                        border: 0,
+                        height: '48px',
+                        border: '1px solid #E6E8EC',
                         borderRadius: '24px',
-                        outline: 'none',
-                        background: 'transparent',
-                        fontFamily: 'inherit',
-                        fontSize: '16px',
-                        color: categoryId ? '#111827' : '#8A90A0',
-                        cursor: 'pointer',
+                        background: '#FFFFFF',
                       }}
                     >
-                      <option value="">No category</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#4B5263"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                      style={{ position: 'absolute', right: '17px', top: '17px', pointerEvents: 'none' }}
-                    >
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </div>
+                      <select
+                        id="p-category"
+                        value={categoryId}
+                        onChange={(e) => setCategoryId(e.target.value)}
+                        style={{
+                          appearance: 'none',
+                          WebkitAppearance: 'none',
+                          display: 'block',
+                          width: '100%',
+                          height: '100%',
+                          boxSizing: 'border-box',
+                          padding: '0 44px 0 17px',
+                          border: 0,
+                          borderRadius: '24px',
+                          outline: 'none',
+                          background: 'transparent',
+                          fontFamily: 'inherit',
+                          fontSize: '16px',
+                          color: categoryId ? '#111827' : '#8A90A0',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">No category</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#4B5263"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        style={{ position: 'absolute', right: '17px', top: '17px', pointerEvents: 'none' }}
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  )}
                   {categoriesLoaded && categories.length === 0 && (
                     <p style={{ margin: '8px 0 0', fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>
                       You have no categories yet.{' '}

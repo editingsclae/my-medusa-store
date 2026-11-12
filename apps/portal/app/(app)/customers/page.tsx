@@ -174,9 +174,9 @@ export default function CustomersPage() {
   if (selectedCustomer) {
     const cust = selectedCustomer;
     const isRegistered = cust.has_account || cust.account_status === 'Registered';
-    const firstName = cust.first_name || (cust.name || '').split(' ')[0] || 'Customer';
+    const firstName = cust.first_name || (cust.name || '').split(' ')[0] || '';
     const totalSpent = detailOrders.reduce((s, o) => s + (o.total || 0), 0);
-    const currencyCode = detailOrders[0]?.currency_code?.toUpperCase() || 'TND';
+    const currencyCode = detailOrders[0]?.currency_code ? detailOrders[0].currency_code.toUpperCase() : '';
     const addresses = cust.addresses || [];
 
     return (
@@ -216,7 +216,7 @@ export default function CustomersPage() {
               <Avatar name={cust.name || ''} size={64} />
               <div style={{ minWidth: 0 }}>
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600, lineHeight: '28px' }}>
-                  {cust.name || 'Customer'}
+                  {cust.name || cust.email || ''}
                 </h2>
                 <div style={{ fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>
                   {cust.email}
@@ -245,7 +245,7 @@ export default function CustomersPage() {
               <div>
                 <dt style={{ fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>Total spent</dt>
                 <dd style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 600, lineHeight: '24px' }}>
-                  {totalSpent.toFixed(2)} {currencyCode}
+                  {totalSpent.toFixed(2)}{currencyCode ? ` ${currencyCode}` : ''}
                 </dd>
               </div>
             </dl>
@@ -256,7 +256,7 @@ export default function CustomersPage() {
             <div style={{ padding: '24px' }}>
               <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600, lineHeight: '28px' }}>Orders</h2>
               <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, lineHeight: '20px', color: '#4B5263' }}>
-                Everything {firstName} has ordered.
+                Everything {firstName || 'this customer'} has ordered.
               </p>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -272,7 +272,30 @@ export default function CustomersPage() {
                   <span>Status</span><span style={{ textAlign: 'right' }}>Total</span>
                 </div>
                 {detailLoading ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: '#8A90A0' }}>Loading orders...</div>
+                  <LoadingRegion label="Loading customer orders">
+                    {[0, 1].map((i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(120px, 1fr) 180px 110px 150px 120px',
+                          alignItems: 'center',
+                          height: '64px',
+                          boxSizing: 'border-box',
+                          padding: '0 24px',
+                          borderBottom: '1px solid #EDEFF3',
+                        }}
+                      >
+                        <Skeleton width={80} height={16} />
+                        <Skeleton width={90} height={14} />
+                        <Skeleton width={50} height={14} />
+                        <Skeleton width={80} height={24} radius={12} />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <Skeleton width={70} height={16} />
+                        </div>
+                      </div>
+                    ))}
+                  </LoadingRegion>
                 ) : detailOrders.length > 0 ? (
                   detailOrders.map((order) => (
                     <div key={order.id} style={{
@@ -484,65 +507,67 @@ export default function CustomersPage() {
                   </button>
                 </div>
               ) : displayCustomers.length > 0 ? (
-                displayCustomers.map((cust) => {
-                  const isRegistered = cust.has_account || cust.account_status === 'Registered';
-                  return (
-                    <div
-                      key={cust.id}
-                      onClick={() => handleRowClick(cust)}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(260px, 1.5fr) minmax(160px, 1fr) 170px 170px 32px',
-                        alignItems: 'center', height: '64px', boxSizing: 'border-box',
-                        padding: '0 24px', borderBottom: '1px solid #EDEFF3',
-                        fontSize: '16px', fontWeight: 500, color: '#111827',
-                        cursor: 'pointer', transition: 'background 0.12s',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAFC')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                    >
-                      {/* Email */}
-                      <span style={{ minWidth: 0, paddingRight: '12px' }}>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleRowClick(cust); }}
-                          aria-label={`View details for ${cust.name || cust.email}`}
-                          style={{
-                            display: 'block', maxWidth: '100%', padding: 0, border: 0,
-                            background: 'transparent', fontFamily: 'inherit',
-                            fontSize: '16px', fontWeight: 500, color: '#111827',
-                            textAlign: 'left', whiteSpace: 'nowrap',
-                            overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
-                          }}
-                        >
-                          {cust.email}
-                        </button>
-                      </span>
+                <div style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+                  {displayCustomers.map((cust) => {
+                    const isRegistered = cust.has_account || cust.account_status === 'Registered';
+                    return (
+                      <div
+                        key={cust.id}
+                        onClick={() => handleRowClick(cust)}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(260px, 1.5fr) minmax(160px, 1fr) 170px 170px 32px',
+                          alignItems: 'center', height: '64px', boxSizing: 'border-box',
+                          padding: '0 24px', borderBottom: '1px solid #EDEFF3',
+                          fontSize: '16px', fontWeight: 500, color: '#111827',
+                          cursor: 'pointer', transition: 'background 0.12s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAFC')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                      >
+                        {/* Email */}
+                        <span style={{ minWidth: 0, paddingRight: '12px' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleRowClick(cust); }}
+                            aria-label={`View details for ${cust.name || cust.email}`}
+                            style={{
+                              display: 'block', maxWidth: '100%', padding: 0, border: 0,
+                              background: 'transparent', fontFamily: 'inherit',
+                              fontSize: '16px', fontWeight: 500, color: '#111827',
+                              textAlign: 'left', whiteSpace: 'nowrap',
+                              overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
+                            }}
+                          >
+                            {cust.email}
+                          </button>
+                        </span>
 
-                      {/* Name */}
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px' }}>
-                        {cust.name || 'Guest Customer'}
-                      </span>
+                        {/* Name */}
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px' }}>
+                          {cust.name || '—'}
+                        </span>
 
-                      {/* Account badge */}
-                      <span style={{ display: 'flex', alignItems: 'center' }}>
-                        <AccountBadge registered={isRegistered} />
-                      </span>
+                        {/* Account badge */}
+                        <span style={{ display: 'flex', alignItems: 'center' }}>
+                          <AccountBadge registered={isRegistered} />
+                        </span>
 
-                      {/* Created date */}
-                      <span>
-                        {cust.created_at
-                          ? new Date(cust.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-                          : 'N/A'}
-                      </span>
+                        {/* Created date */}
+                        <span>
+                          {cust.created_at
+                            ? new Date(cust.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                            : 'N/A'}
+                        </span>
 
-                      {/* Chevron */}
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#6B7280' }}>
-                        <ChevronRight />
-                      </span>
-                    </div>
-                  );
-                })
+                        {/* Chevron */}
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#6B7280' }}>
+                          <ChevronRight />
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <div role="status" style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',

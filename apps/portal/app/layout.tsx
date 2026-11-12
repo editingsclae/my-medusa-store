@@ -9,17 +9,17 @@ const urbanist = Urbanist({
 });
 
 export const metadata: Metadata = {
-  title: 'Delisas Products',
-  description: 'Delisas products dashboard interface',
+  title: 'GetCardy Portal',
+  description: 'GetCardy merchant portal',
   openGraph: {
-    title: 'Delisas Products',
-    description: 'Delisas products dashboard interface',
+    title: 'GetCardy Portal',
+    description: 'GetCardy merchant portal',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Delisas Products',
-    description: 'Delisas products dashboard interface',
+    title: 'GetCardy Portal',
+    description: 'GetCardy merchant portal',
   },
 };
 

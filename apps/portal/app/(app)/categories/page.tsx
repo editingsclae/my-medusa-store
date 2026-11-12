@@ -9,6 +9,7 @@ import {
   MerchantCategory,
 } from '@/lib/medusa';
 import ConfirmDeleteModal from '@/components/products/ConfirmDeleteModal';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 
 const MAX_NAME_LENGTH = 100;
 
@@ -49,7 +50,7 @@ const pillButton: React.CSSProperties = {
 };
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<MerchantCategory[]>([]);
+  const [categories, setCategories] = useState<MerchantCategory[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -260,13 +261,54 @@ export default function CategoriesPage() {
               <span style={{ textAlign: 'right' }}>Actions</span>
             </div>
 
-            {loading ? (
-              <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading categories...</div>
-            ) : loadError ? (
-              <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#B42318' }}>
-                {loadError}
+            {loading && categories === null ? (
+              <LoadingRegion label="Loading categories">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(220px, 1.5fr) 140px 200px',
+                      alignItems: 'center',
+                      minHeight: '64px',
+                      boxSizing: 'border-box',
+                      padding: '8px 24px',
+                      borderBottom: '1px solid #EDEFF3',
+                    }}
+                  >
+                    <Skeleton width="60%" height={16} />
+                    <Skeleton width={32} height={16} />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                      <Skeleton width={50} height={32} radius={16} />
+                      <Skeleton width={60} height={32} radius={16} />
+                    </div>
+                  </div>
+                ))}
+              </LoadingRegion>
+            ) : loadError && categories === null ? (
+              <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#6B7280' }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>The categories could not be loaded.</p>
+                <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: '#B42318' }}>{loadError}</p>
+                <button
+                  type="button"
+                  onClick={load}
+                  style={{
+                    ...pillButton,
+                    marginTop: '16px',
+                    height: '40px',
+                    padding: '0 22px',
+                    border: 0,
+                    borderRadius: '20px',
+                    background: 'var(--accent)',
+                    color: '#FFFFFF',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                  }}
+                >
+                  Try again
+                </button>
               </div>
-            ) : categories.length === 0 ? (
+            ) : (categories?.length ?? 0) === 0 ? (
               <div
                 role="status"
                 style={{
@@ -282,7 +324,8 @@ export default function CategoriesPage() {
                 No categories yet. Add your first one above.
               </div>
             ) : (
-              categories.map((category) => {
+              <div style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+                {categories!.map((category) => {
                 const isEditing = editingId === category.id;
                 return (
                   <div
@@ -400,7 +443,8 @@ export default function CategoriesPage() {
                     </span>
                   </div>
                 );
-              })
+              })}
+              </div>
             )}
           </div>
         </div>

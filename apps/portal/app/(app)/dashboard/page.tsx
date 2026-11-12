@@ -10,7 +10,7 @@ import TopProducts from '@/components/dashboard/TopProducts';
 import { Skeleton, SkeletonCard, LoadingRegion } from '@/components/ui/Skeleton';
 import { DailyRevenue, KpiData } from '@/lib/dashboard-data';
 import { getMerchantAnalytics, getMerchantProducts, MerchantAnalytics } from '@/lib/medusa';
-import { CalendarIcon, ChevronDownIcon, PlusIcon } from '@/components/icons';
+import { CalendarIcon, PlusIcon } from '@/components/icons';
 
 function formatMoney(amount: number, currencyCode: string): string {
   return `${Number(amount).toFixed(2)} ${(currencyCode || '').toUpperCase()}`.trim();
@@ -168,8 +168,7 @@ export default function DashboardPage() {
     <>
       {/* Page Header */}
       <PageHeader title="Dashboard">
-        <button
-          type="button"
+        <div
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -183,13 +182,11 @@ export default function DashboardPage() {
             fontSize: '16px',
             fontWeight: 500,
             color: '#374151',
-            cursor: 'pointer',
           }}
         >
           <CalendarIcon />
-          Last 7-30 days
-          <ChevronDownIcon style={{ marginLeft: '4px' }} />
-        </button>
+          Last 7 days
+        </div>
 
         <Link
           href="/products/new"

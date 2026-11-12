@@ -10,6 +10,7 @@ import {
   DeliveryOption,
 } from '@/lib/medusa';
 import ConfirmDeleteModal from '@/components/products/ConfirmDeleteModal';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 
 const MAX_NAME_LENGTH = 60;
 const MAX_PRICE = 100000;
@@ -96,8 +97,8 @@ export default function DeliverySettingsPage() {
   const [checking, setChecking] = useState(true);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
-  const [options, setOptions] = useState<DeliveryOption[]>([]);
-  const [currency, setCurrency] = useState('tnd');
+  const [options, setOptions] = useState<DeliveryOption[] | null>(null);
+  const [currency, setCurrency] = useState<string | null>(null);
   const [countries, setCountries] = useState<string[]>([]);
   const [canAdd, setCanAdd] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -122,7 +123,7 @@ export default function DeliverySettingsPage() {
       setLoadError(null);
       const res = await getDeliveryOptions();
       setOptions(res.delivery_options || []);
-      setCurrency(res.currency_code || 'tnd');
+      setCurrency(res.currency_code || '');
       setCountries(res.countries || []);
       setCanAdd(Boolean(res.can_add));
     } catch (err) {
@@ -143,7 +144,7 @@ export default function DeliverySettingsPage() {
       .finally(() => setChecking(false));
   }, [load]);
 
-  const enabledCount = options.filter((o) => o.enabled).length;
+  const enabledCount = options?.filter((o) => o.enabled).length ?? 0;
 
   const startEdit = (option: DeliveryOption) => {
     setEditingId(option.id);
@@ -253,7 +254,36 @@ export default function DeliverySettingsPage() {
   if (checking) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>
+        <section style={{ ...cardStyle, padding: '24px' }}>
+          <Skeleton width={120} height={24} />
+          <div style={{ marginTop: '8px' }}>
+            <Skeleton width="40%" height={14} />
+          </div>
+          <div style={{ margin: '20px 0 0', display: 'grid', gap: '10px' }}>
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                style={{
+                  border: '1px solid #E6E8EC',
+                  borderRadius: '18px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <Skeleton width={140} height={18} />
+                  <Skeleton width={80} height={14} />
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Skeleton width={50} height={36} radius={18} />
+                  <Skeleton width={80} height={36} radius={18} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     );
   }
@@ -279,7 +309,7 @@ export default function DeliverySettingsPage() {
           Delivery
         </h2>
         <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#4B5263' }}>
-          The delivery options shoppers can choose at checkout. Prices are in {currency.toUpperCase()}.
+          The delivery options shoppers can choose at checkout.{currency ? ` Prices are in ${currency.toUpperCase()}.` : ''}
           {countries.length > 0 && <> Delivers to: {countries.map((c) => c.toUpperCase()).join(', ')}.</>}
         </p>
 
@@ -301,22 +331,47 @@ export default function DeliverySettingsPage() {
           </div>
         )}
 
-        {loading ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>
-        ) : loadError ? (
+        {loading && options === null ? (
+          <LoadingRegion label="Loading delivery options">
+            <div style={{ margin: '16px 0 0', display: 'grid', gap: '10px' }}>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    border: '1px solid #E6E8EC',
+                    borderRadius: '18px',
+                    padding: '14px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <Skeleton width={140} height={18} />
+                    <Skeleton width={80} height={14} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Skeleton width={50} height={36} radius={18} />
+                    <Skeleton width={80} height={36} radius={18} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </LoadingRegion>
+        ) : loadError && options === null ? (
           <div role="alert" style={{ marginTop: '16px', fontSize: '14px', color: '#B42318' }}>
             {loadError}{' '}
             <button type="button" onClick={load} style={smallButton}>
               Try again
             </button>
           </div>
-        ) : options.length === 0 ? (
+        ) : (options?.length ?? 0) === 0 ? (
           <p style={{ margin: '16px 0 0', fontSize: '14px', color: '#4B5263' }}>
             You have no delivery options yet. Shoppers cannot check out until you add one.
           </p>
         ) : (
-          <ul style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px' }}>
-            {options.map((option) => {
+          <ul style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'grid', gap: '10px', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+            {options!.map((option) => {
               const isEditing = editingId === option.id;
               const busy = busyId === option.id;
               const lastOn = option.enabled && enabledCount === 1;
@@ -343,7 +398,7 @@ export default function DeliverySettingsPage() {
                         />
                       </label>
                       <label style={{ ...labelStyle, flex: '1 1 140px' }}>
-                        Price ({currency.toUpperCase()})
+                        Price ({currency ? currency.toUpperCase() : ''})
                         <input
                           value={editPrice}
                           inputMode="decimal"
@@ -459,7 +514,7 @@ export default function DeliverySettingsPage() {
                   />
                 </label>
                 <label style={{ ...labelStyle, flex: '1 1 140px' }}>
-                  Price ({currency.toUpperCase()})
+                  Price ({currency ? currency.toUpperCase() : ''})
                   <input
                     value={newPrice}
                     inputMode="decimal"

@@ -11,6 +11,7 @@ import {
 } from '@/lib/medusa';
 import { MAX_TITLE, featuredOver, isDirty, moveItem, sectionHelp, validateSettings } from '@/lib/home-sections';
 import { inputStyle, pillButton, iconButton, smallButton, sectionHintStyle, sectionTitleStyle } from '@/components/settings/styles';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 
 type Props = {
   // The merchant's products, for choosing the featured ones
@@ -78,9 +79,21 @@ export default function HomeSectionsCard({ products }: Props) {
   }
   if (!info || !draft || !saved) {
     return (
-      <div style={{ padding: '20px 24px 24px' }} role="status">
-        <p style={muted}>Loading...</p>
-      </div>
+      <LoadingRegion label="Loading home sections" style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <Skeleton width={180} height={24} />
+        <Skeleton width="60%" height={14} />
+        <div style={{ display: 'grid', gap: '12px', marginTop: '8px' }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ border: '1px solid #E6E8EC', borderRadius: '16px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <Skeleton width={140} height={18} />
+                <Skeleton width={200} height={14} />
+              </div>
+              <Skeleton width={60} height={32} radius={16} />
+            </div>
+          ))}
+        </div>
+      </LoadingRegion>
     );
   }
 

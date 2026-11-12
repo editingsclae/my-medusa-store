@@ -22,6 +22,7 @@ import { SaveBar } from '@/components/settings/SaveBar';
 import LayoutKeyCard from '@/components/settings/LayoutKeyCard';
 import { SettingsTabs, panelProps } from '@/components/settings/SettingsTabs';
 import HomeSectionsCard from '@/components/settings/HomeSectionsCard';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 import {
   cardStyle,
   dangerSmallButton,
@@ -760,9 +761,33 @@ export default function AppearanceSettingsPage() {
     }
   };
 
-  if (checking) {
+  if (checking || loading) {
     return (
-      <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <section style={cardStyle}>
+          <div style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #E6E8EC' }}>
+            <Skeleton width={110} height={40} radius={20} />
+            <Skeleton width={130} height={40} radius={20} />
+            <Skeleton width={120} height={40} radius={20} />
+            <Skeleton width={130} height={40} radius={20} />
+          </div>
+          <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Skeleton width={180} height={24} />
+            <Skeleton width={380} height={14} />
+            <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
+              {[0, 1].map((i) => (
+                <div key={i} style={{ border: '1px solid #E6E8EC', borderRadius: '18px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <Skeleton width={80} height={45} radius={8} />
+                    <Skeleton width={140} height={18} />
+                  </div>
+                  <Skeleton width={80} height={36} radius={18} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
     );
   }
 
@@ -776,10 +801,6 @@ export default function AppearanceSettingsPage() {
         </p>
       </section>
     );
-  }
-
-  if (loading) {
-    return <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>;
   }
 
   if (loadError) {
@@ -905,7 +926,17 @@ export default function AppearanceSettingsPage() {
           </button>
         </p>
       ) : categories === null ? (
-        <p style={messageBox('muted')}>Loading your categories...</p>
+        <LoadingRegion label="Loading your categories" style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
+          {[0, 1].map((i) => (
+            <div key={i} style={{ border: '1px solid #E6E8EC', borderRadius: '18px', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Skeleton width={48} height={48} radius={10} />
+                <Skeleton width={140} height={18} />
+              </div>
+              <Skeleton width={80} height={36} radius={18} />
+            </div>
+          ))}
+        </LoadingRegion>
       ) : categories.length === 0 ? (
         <p style={messageBox('muted')}>
           You have no categories yet. Create categories first (Categories in the menu), then come back to add their

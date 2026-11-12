@@ -8,6 +8,7 @@ import {
   CreatedMerchant,
   PlatformMerchant,
 } from '@/lib/medusa';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 
 const MAX_NAME_LENGTH = 100;
 const MIN_PASSWORD_LENGTH = 8;
@@ -80,7 +81,7 @@ export default function MerchantsPage() {
   const [checking, setChecking] = useState(true);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
-  const [merchants, setMerchants] = useState<PlatformMerchant[]>([]);
+  const [merchants, setMerchants] = useState<PlatformMerchant[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -224,7 +225,61 @@ export default function MerchantsPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {header}
-        <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>
+        <section style={cardStyle}>
+          <div style={{ padding: '24px 24px 8px' }}>
+            <Skeleton width={160} height={24} />
+            <div style={{ marginTop: '8px' }}>
+              <Skeleton width="60%" height={14} />
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto', marginTop: '16px' }}>
+            <div style={{ minWidth: '640px' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(200px, 1.4fr) 100px 100px 140px',
+                  alignItems: 'center',
+                  height: '40px',
+                  boxSizing: 'border-box',
+                  padding: '0 24px',
+                  background: '#F7F8FA',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: '#1F2937',
+                }}
+              >
+                <span>Store</span>
+                <span>Owner</span>
+                <span>Products</span>
+                <span>Orders</span>
+                <span>Created</span>
+              </div>
+              <LoadingRegion label="Loading merchants">
+                {[0, 1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(200px, 1.4fr) 100px 100px 140px',
+                      alignItems: 'center',
+                      minHeight: '64px',
+                      boxSizing: 'border-box',
+                      padding: '8px 24px',
+                      borderBottom: '1px solid #EDEFF3',
+                    }}
+                  >
+                    <Skeleton width="70%" height={16} />
+                    <Skeleton width="80%" height={16} />
+                    <Skeleton width={32} height={16} />
+                    <Skeleton width={32} height={16} />
+                    <Skeleton width={80} height={14} />
+                  </div>
+                ))}
+              </LoadingRegion>
+            </div>
+          </div>
+          <div style={{ height: '16px' }} />
+        </section>
       </div>
     );
   }
@@ -501,13 +556,53 @@ export default function MerchantsPage() {
               <span>Created</span>
             </div>
 
-            {loading ? (
-              <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading merchants...</div>
-            ) : loadError ? (
-              <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#B42318' }}>
-                {loadError}
+            {loading && merchants === null ? (
+              <LoadingRegion label="Loading merchants">
+                {[0, 1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(200px, 1.4fr) 100px 100px 140px',
+                      alignItems: 'center',
+                      minHeight: '64px',
+                      boxSizing: 'border-box',
+                      padding: '8px 24px',
+                      borderBottom: '1px solid #EDEFF3',
+                    }}
+                  >
+                    <Skeleton width="70%" height={16} />
+                    <Skeleton width="80%" height={16} />
+                    <Skeleton width={32} height={16} />
+                    <Skeleton width={32} height={16} />
+                    <Skeleton width={80} height={14} />
+                  </div>
+                ))}
+              </LoadingRegion>
+            ) : loadError && merchants === null ? (
+              <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#6B7280' }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>The merchants could not be loaded.</p>
+                <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: '#B42318' }}>{loadError}</p>
+                <button
+                  type="button"
+                  onClick={load}
+                  style={{
+                    ...pillButton,
+                    marginTop: '16px',
+                    height: '40px',
+                    padding: '0 22px',
+                    border: 0,
+                    borderRadius: '20px',
+                    background: 'var(--accent)',
+                    color: '#FFFFFF',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                  }}
+                >
+                  Try again
+                </button>
               </div>
-            ) : merchants.length === 0 ? (
+            ) : (merchants?.length ?? 0) === 0 ? (
               <div
                 role="status"
                 style={{
@@ -523,36 +618,38 @@ export default function MerchantsPage() {
                 No merchants yet. Add the first one above.
               </div>
             ) : (
-              merchants.map((merchant) => (
-                <div
-                  key={merchant.user.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(200px, 1.4fr) 100px 100px 140px',
-                    alignItems: 'center',
-                    minHeight: '64px',
-                    boxSizing: 'border-box',
-                    padding: '8px 24px',
-                    borderBottom: '1px solid #EDEFF3',
-                    fontSize: '15px',
-                    fontWeight: 500,
-                    color: '#111827',
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>
-                    {merchant.sales_channel?.name || 'No sales channel'}
-                    {merchant.sales_channel?.is_disabled ? ' (disabled)' : ''}
-                  </span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px', color: '#4B5263' }}>
-                    {merchant.user.email}
-                  </span>
-                  <span>{merchant.product_count}</span>
-                  <span>{merchant.order_count}</span>
-                  <span style={{ color: '#4B5263' }}>
-                    {merchant.user.created_at ? new Date(merchant.user.created_at).toLocaleDateString('en-GB') : ''}
-                  </span>
-                </div>
-              ))
+              <div style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+                {merchants!.map((merchant) => (
+                  <div
+                    key={merchant.user.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(200px, 1.4fr) 100px 100px 140px',
+                      alignItems: 'center',
+                      minHeight: '64px',
+                      boxSizing: 'border-box',
+                      padding: '8px 24px',
+                      borderBottom: '1px solid #EDEFF3',
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      color: '#111827',
+                    }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>
+                      {merchant.sales_channel?.name || 'No sales channel'}
+                      {merchant.sales_channel?.is_disabled ? ' (disabled)' : ''}
+                    </span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px', color: '#4B5263' }}>
+                      {merchant.user.email}
+                    </span>
+                    <span>{merchant.product_count}</span>
+                    <span>{merchant.order_count}</span>
+                    <span style={{ color: '#4B5263' }}>
+                      {merchant.user.created_at ? new Date(merchant.user.created_at).toLocaleDateString('en-GB') : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

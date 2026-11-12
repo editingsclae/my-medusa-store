@@ -3,8 +3,8 @@ import BrandPanel from '@/components/auth/BrandPanel';
 import ForgotPasswordForm from '@/components/auth/ForgotPasswordForm';
 
 export const metadata = {
-  title: 'Forgot Password - Delisas',
-  description: 'Reset your Delisas account password',
+  title: 'Forgot Password - GetCardy',
+  description: 'Reset your GetCardy account password',
 };
 
 export default function ForgotPasswordPage() {

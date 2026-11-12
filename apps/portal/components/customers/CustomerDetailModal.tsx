@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { getMerchantCustomer, MerchantCustomer, MerchantOrder } from '@/lib/medusa';
 import { MailIcon, ShoppingCartIcon, TruckIcon } from '@/components/icons';
+import { Skeleton, SkeletonCard, LoadingRegion } from '@/components/ui/Skeleton';
 
 interface CustomerDetailModalProps {
   isOpen: boolean;
@@ -59,9 +60,12 @@ export default function CustomerDetailModal({
         .slice(0, 2)
         .join('')
         .toUpperCase()
-    : 'CU';
+    : currentCustomer?.email
+    ? currentCustomer.email.slice(0, 2).toUpperCase()
+    : '';
 
   const addresses = currentCustomer?.addresses || [];
+  const currency = orders[0]?.currency_code ? orders[0].currency_code.toUpperCase() : '';
 
   return (
     <div
@@ -107,47 +111,59 @@ export default function CustomerDetailModal({
             borderBottom: '1px solid #EDEFF3',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--accent) 0%, #A78BFA 100%)',
-                color: '#FFFFFF',
-                fontSize: '20px',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              {initials}
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
-                  {currentCustomer?.name || 'Customer Details'}
-                </h2>
-                <span
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    background: currentCustomer?.has_account ? '#ECFDF5' : '#F3F4F6',
-                    color: currentCustomer?.has_account ? '#059669' : '#6B7280',
-                  }}
-                >
-                  {currentCustomer?.has_account ? 'Registered' : 'Guest'}
-                </span>
+          {loading && !currentCustomer ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <Skeleton width={56} height={56} radius="50%" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <Skeleton width={180} height={22} radius={6} />
+                <Skeleton width={140} height={14} radius={4} />
               </div>
-              <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6B7280' }}>
-                {currentCustomer?.email}
-              </p>
             </div>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--accent) 0%, #A78BFA 100%)',
+                  color: '#FFFFFF',
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {initials}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
+                    {currentCustomer?.name || currentCustomer?.email || ''}
+                  </h2>
+                  <span
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      background: currentCustomer?.has_account ? '#ECFDF5' : '#F3F4F6',
+                      color: currentCustomer?.has_account ? '#059669' : '#6B7280',
+                    }}
+                  >
+                    {currentCustomer?.has_account ? 'Registered' : 'Guest'}
+                  </span>
+                </div>
+                {currentCustomer?.name && currentCustomer?.email && (
+                  <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6B7280' }}>
+                    {currentCustomer.email}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
@@ -206,9 +222,6 @@ export default function CustomerDetailModal({
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
             }}
           >
             Orders ({orders.length})
@@ -232,10 +245,49 @@ export default function CustomerDetailModal({
           </button>
         </div>
 
-        {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#6B7280' }}>
-            Loading customer details...
-          </div>
+        {loading && !currentCustomer ? (
+          <LoadingRegion label="Loading customer details" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '16px',
+              }}
+            >
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '16px',
+                    background: '#F9FAFB',
+                    borderRadius: '16px',
+                    border: '1px solid #E5E7EB',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  <Skeleton width={80} height={14} />
+                  <Skeleton width={60} height={24} />
+                </div>
+              ))}
+            </div>
+            <div
+              style={{
+                padding: '20px',
+                background: '#F9FAFB',
+                borderRadius: '16px',
+                border: '1px solid #E5E7EB',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}
+            >
+              <Skeleton width={140} height={18} />
+              <Skeleton width="60%" height={14} />
+              <Skeleton width="40%" height={14} />
+            </div>
+          </LoadingRegion>
         ) : (
           <div>
             {/* OVERVIEW TAB */}
@@ -276,8 +328,7 @@ export default function CustomerDetailModal({
                       Total Spend
                     </span>
                     <strong style={{ fontSize: '20px', color: '#111827' }}>
-                      {orders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2)}{' '}
-                      {orders[0]?.currency_code?.toUpperCase() || 'TND'}
+                      {orders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2)}{currency ? ` ${currency}` : ''}
                     </strong>
                   </div>
 
@@ -292,49 +343,46 @@ export default function CustomerDetailModal({
                     <span style={{ fontSize: '13px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
                       Customer Since
                     </span>
-                    <strong style={{ fontSize: '16px', color: '#111827' }}>
+                    <strong style={{ fontSize: '18px', color: '#111827' }}>
                       {currentCustomer?.created_at
                         ? new Date(currentCustomer.created_at).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
                           })
-                        : 'N/A'}
+                        : '—'}
                     </strong>
                   </div>
                 </div>
 
-                {/* Primary Address preview in Overview */}
-                <div>
-                  <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', fontWeight: 600, color: '#111827' }}>
-                    Primary Address
-                  </h4>
+                {/* Shipping info banner */}
+                <div
+                  style={{
+                    padding: '20px',
+                    background: '#F9FAFB',
+                    borderRadius: '16px',
+                    border: '1px solid #E5E7EB',
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 600, color: '#111827' }}>
+                    Default Shipping Address
+                  </h3>
                   {addresses.length > 0 ? (
-                    <div
-                      style={{
-                        padding: '16px',
-                        borderRadius: '14px',
-                        border: '1px solid #E5E7EB',
-                        background: '#FFFFFF',
-                      }}
-                    >
-                      <p style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#111827' }}>
+                    <div>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 500, color: '#111827' }}>
                         {[addresses[0].first_name, addresses[0].last_name].filter(Boolean).join(' ') ||
-                          currentCustomer?.name}
+                          currentCustomer?.name || ''}
                       </p>
-                      <p style={{ margin: '0 0 4px 0', color: '#4B5563', fontSize: '14px' }}>
-                        {addresses[0].address_1} {addresses[0].address_2}
+                      <p style={{ margin: '0 0 2px 0', fontSize: '14px', color: '#4B5563' }}>
+                        {addresses[0].address_1}
+                        {addresses[0].address_2 ? `, ${addresses[0].address_2}` : ''}
                       </p>
-                      <p style={{ margin: '0 0 4px 0', color: '#4B5563', fontSize: '14px' }}>
-                        {[addresses[0].city, addresses[0].postal_code, addresses[0].country_code?.toUpperCase()]
-                          .filter(Boolean)
-                          .join(', ')}
+                      <p style={{ margin: '0 0 2px 0', fontSize: '14px', color: '#4B5563' }}>
+                        {[addresses[0].postal_code, addresses[0].city].filter(Boolean).join(' ')}
                       </p>
-                      {addresses[0].phone && (
-                        <p style={{ margin: 0, color: '#6B7280', fontSize: '13px' }}>
-                          Phone: {addresses[0].phone}
-                        </p>
-                      )}
+                      <p style={{ margin: 0, fontSize: '14px', color: '#4B5563' }}>
+                        {addresses[0].country_code?.toUpperCase()}
+                      </p>
                     </div>
                   ) : (
                     <p style={{ margin: 0, fontSize: '14px', color: '#9CA3AF' }}>
@@ -394,7 +442,7 @@ export default function CustomerDetailModal({
                             {order.status}
                           </span>
                           <strong style={{ fontSize: '15px', color: '#111827' }}>
-                            {Number(order.total || 0).toFixed(2)} {order.currency_code?.toUpperCase()}
+                            {Number(order.total || 0).toFixed(2)} {order.currency_code ? order.currency_code.toUpperCase() : ''}
                           </strong>
                         </div>
                       </div>
@@ -418,14 +466,15 @@ export default function CustomerDetailModal({
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 fontSize: '13px',
-                                color: '#374151',
+                                color: '#4B5563',
                               }}
                             >
                               <span>
                                 {item.quantity}x {item.title}
                               </span>
-                              <span style={{ fontWeight: 500 }}>
-                                {(item.unit_price * item.quantity).toFixed(2)} {order.currency_code?.toUpperCase()}
+                              <span>
+                                {Number(item.unit_price || 0).toFixed(2)}{' '}
+                                {order.currency_code ? order.currency_code.toUpperCase() : ''}
                               </span>
                             </div>
                           ))}
@@ -434,85 +483,62 @@ export default function CustomerDetailModal({
                     </div>
                   ))
                 ) : (
-                  <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF' }}>
-                    <ShoppingCartIcon style={{ width: '32px', height: '32px', margin: '0 auto 8px auto', color: '#D1D5DB' }} />
-                    <p style={{ margin: 0, fontSize: '15px', fontWeight: 500 }}>No orders placed yet</p>
-                  </div>
+                  <p style={{ margin: 0, padding: '24px', textAlign: 'center', color: '#9CA3AF' }}>
+                    No orders placed yet.
+                  </p>
                 )}
               </div>
             )}
 
             {/* ADDRESSES TAB */}
             {activeTab === 'addresses' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                 {addresses.length > 0 ? (
-                  addresses.map((addr, idx) => (
+                  addresses.map((addr) => (
                     <div
-                      key={addr.id || idx}
+                      key={addr.id}
                       style={{
-                        padding: '18px',
+                        padding: '16px',
                         borderRadius: '16px',
                         border: '1px solid #E5E7EB',
-                        background: '#FFFFFF',
+                        background: '#F9FAFB',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <TruckIcon style={{ width: '18px', height: '18px', color: 'var(--accent)' }} />
-                        <strong style={{ fontSize: '15px', color: '#111827' }}>
-                          Address {idx + 1}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <TruckIcon style={{ width: '16px', height: '16px', color: 'var(--accent)' }} />
+                        <strong style={{ fontSize: '14px', color: '#111827' }}>
+                          {[addr.first_name, addr.last_name].filter(Boolean).join(' ') || currentCustomer?.name || ''}
                         </strong>
                       </div>
-                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 600, color: '#1F2937' }}>
-                        {[addr.first_name, addr.last_name].filter(Boolean).join(' ') || currentCustomer?.name}
+                      <p style={{ margin: 0, fontSize: '13px', color: '#4B5563' }}>
+                        {addr.address_1}
+                        {addr.address_2 ? `, ${addr.address_2}` : ''}
                       </p>
-                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', color: '#4B5563' }}>
-                        {addr.address_1} {addr.address_2}
+                      <p style={{ margin: 0, fontSize: '13px', color: '#4B5563' }}>
+                        {[addr.postal_code, addr.city].filter(Boolean).join(' ')}
                       </p>
-                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', color: '#4B5563' }}>
-                        {[addr.city, addr.province, addr.postal_code, addr.country_code?.toUpperCase()]
-                          .filter(Boolean)
-                          .join(', ')}
+                      <p style={{ margin: 0, fontSize: '13px', color: '#4B5563' }}>
+                        {addr.country_code?.toUpperCase()}
                       </p>
                       {addr.phone && (
-                        <p style={{ margin: 0, fontSize: '13px', color: '#6B7280' }}>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
                           Phone: {addr.phone}
                         </p>
                       )}
                     </div>
                   ))
                 ) : (
-                  <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF' }}>
-                    <TruckIcon style={{ width: '32px', height: '32px', margin: '0 auto 8px auto', color: '#D1D5DB' }} />
-                    <p style={{ margin: 0, fontSize: '15px', fontWeight: 500 }}>
-                      No saved addresses found for this customer.
-                    </p>
-                  </div>
+                  <p style={{ margin: 0, padding: '24px', textAlign: 'center', color: '#9CA3AF' }}>
+                    No addresses on file.
+                  </p>
                 )}
               </div>
             )}
           </div>
         )}
-
-        {/* Modal Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              padding: '0 24px',
-              height: '42px',
-              borderRadius: '21px',
-              border: '1px solid #D1D5DB',
-              background: '#FFFFFF',
-              color: '#374151',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );

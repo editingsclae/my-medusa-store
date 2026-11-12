@@ -12,6 +12,7 @@ import {
   MerchantOrder,
 } from '@/lib/medusa';
 import { SearchIcon } from '@/components/icons';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 
 // ─── Status tones ────────────────────────────────────────────────────────────
 interface StatusTone {
@@ -60,13 +61,16 @@ function getFulfillmentBadgeInfo(stage: number): { label: string; tone: StatusTo
   return { label: FUL_LABELS[idx], tone: FUL_TONES[idx] };
 }
 
-function formatMoney(amount: number, currency = 'TND'): string {
-  const cur = (currency || 'TND').toUpperCase();
+function formatMoney(amount: number, currency?: string): string {
   const val = Number(amount || 0);
+  const cur = (currency || '').toUpperCase();
   if (cur === 'TND') {
-    return `TND ${val.toFixed(3)} TND`;
+    return `${val.toFixed(3)} TND`;
   }
-  return `${val.toFixed(2)} ${cur}`;
+  if (cur) {
+    return `${val.toFixed(2)} ${cur}`;
+  }
+  return val.toFixed(2);
 }
 
 // Format relative date or absolute date
@@ -116,9 +120,10 @@ function TunisiaFlag() {
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<MerchantOrder[]>([]);
+  const [orders, setOrders] = useState<MerchantOrder[] | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -150,6 +155,7 @@ export default function OrdersPage() {
   const loadOrders = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await getMerchantOrders({
         limit: pageSize,
         offset: (page - 1) * pageSize,
@@ -157,7 +163,7 @@ export default function OrdersPage() {
       setOrders(res.orders || []);
       setTotalCount(res.count ?? res.orders?.length ?? 0);
     } catch (err) {
-      console.error('Failed to load orders', err);
+      setLoadError(err instanceof Error ? err.message : 'Could not load orders.');
     } finally {
       setLoading(false);
     }
@@ -168,6 +174,7 @@ export default function OrdersPage() {
   }, [page]);
 
   const filteredOrders = useMemo(() => {
+    if (!orders) return [];
     const q = search.trim().toLowerCase();
     if (!q) return orders;
     return orders.filter((o) => {
@@ -178,7 +185,7 @@ export default function OrdersPage() {
     });
   }, [orders, search]);
 
-  const listTotal = totalCount || orders.length;
+  const listTotal = totalCount || orders?.length || 0;
   const totalPages = Math.max(1, Math.ceil(listTotal / pageSize));
 
   // Open order detail
@@ -284,7 +291,7 @@ export default function OrdersPage() {
   const handleMarkShipped = async () => {
     if (!detailOrder) return;
     setActionLoading(true);
-    const trackingNo = `DLS-${Math.floor(48000 + Math.random() * 500)}`;
+    const trackingNo = `GC-${Math.floor(48000 + Math.random() * 500)}`;
     const fulId = detailOrder.fulfillments?.[0]?.id;
     try {
       await shipMerchantOrder(detailOrder.id, {
@@ -374,7 +381,7 @@ export default function OrdersPage() {
       ? { label: 'Captured', tone: TONES.green }
       : getPaymentBadgeInfo(o.payment_status);
 
-    const cur = o.currency_code || 'TND';
+    const cur = o.currency_code || '';
     const items = o.items || [];
 
     // Exact backend values
@@ -404,34 +411,36 @@ export default function OrdersPage() {
     const outstanding = Math.max(0, orderTotal - paidTotal);
 
     // Real Payment data from backend
-    const paymentId = firstPayment?.id || `pay_${o.id.slice(-8)}`;
-    const paymentProvider = firstPayment?.provider_id || (o.shipping_methods?.[0]?.name ? 'Manual / Store Payment' : 'Standard Provider');
+    const paymentId = firstPayment?.id || '';
+    const paymentProvider = firstPayment?.provider_id || (o.shipping_methods?.[0]?.name ? 'Manual / Store Payment' : '');
     const paymentDate = firstPayment?.created_at ? new Date(firstPayment.created_at) : new Date(o.created_at);
     const canCapture = !isPaid && (payInfo.label === 'Authorized' || rawPaymentStatus === 'authorized' || rawPaymentStatus === 'awaiting');
 
     // Real Fulfillment data from backend
     const firstFulfillment = o.fulfillments?.[0];
     const shippingMethod = o.shipping_methods?.[0];
-    const fulfillmentProvider = shippingMethod?.name || (firstFulfillment ? 'Standard Carrier' : 'Not assigned');
-    const trackingNumber = firstFulfillment?.labels?.[0]?.tracking_number || (stage >= 2 ? 'Tracking assigned' : 'Not available until shipped');
+    const fulfillmentProvider = shippingMethod?.name || '';
+    const trackingNumber = firstFulfillment?.labels?.[0]?.tracking_number || '';
 
     // Customer info
-    const customerName = `${o.customer?.first_name || ''} ${o.customer?.last_name || ''}`.trim() || 'Guest Customer';
+    const customerName = `${o.customer?.first_name || ''} ${o.customer?.last_name || ''}`.trim() || o.customer?.email || '';
     const initials = customerName
-      .split(' ')
-      .filter(Boolean)
-      .map((w) => w[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || 'CU';
-    const email = o.customer?.email || o.email || 'customer@example.com';
-    const phone = o.customer?.phone || o.shipping_address?.phone || 'No phone number';
+      ? customerName
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => w[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase()
+      : (o.email ? o.email.slice(0, 2).toUpperCase() : '');
+    const email = o.customer?.email || o.email || '';
+    const phone = o.customer?.phone || o.shipping_address?.phone || '';
 
     // Real Shipping Address
     const addr = o.shipping_address;
-    const street = [addr?.address_1, addr?.address_2].filter(Boolean).join(' ') || 'No street address';
+    const street = [addr?.address_1, addr?.address_2].filter(Boolean).join(' ');
     const cityPostal = [addr?.postal_code, addr?.city].filter(Boolean).join(' ') || '';
-    const country = addr?.country_code?.toUpperCase() === 'TN' ? 'Tunisia' : addr?.country_code?.toUpperCase() || 'Tunisia';
+    const country = addr?.country_code?.toUpperCase() === 'TN' ? 'Tunisia' : addr?.country_code?.toUpperCase() || '';
 
     // Real Activity timeline from order timestamps
     const activityItems: { title: string; when: string }[] = [];
@@ -1628,7 +1637,7 @@ export default function OrdersPage() {
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, listTotal);
   const footerText = search.trim()
-    ? `Showing ${filteredOrders.length} of ${orders.length} entries`
+    ? `Showing ${filteredOrders.length} of ${orders?.length ?? 0} entries`
     : listTotal > 0
     ? `Showing ${start} to ${end} of ${listTotal} entries`
     : 'No orders';
@@ -1797,28 +1806,11 @@ export default function OrdersPage() {
             </div>
 
             <div>
-              {loading ? (
-                <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading orders...</div>
-              ) : filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => {
-                  const stage = getFulfillmentStage(order);
-                  const fulInfo = getFulfillmentBadgeInfo(stage);
-                  const payInfo = getPaymentBadgeInfo(order.payment_status);
-
-                  const orderNo = `#${order.display_id || order.id.slice(-6)}`;
-                  const orderDate = new Date(order.created_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  });
-                  const customerName = `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim() || order.customer?.email || 'Guest Customer';
-                  const salesChannel = order.sales_channel?.name || 'Default Sales Channel';
-                  const formattedTotal = formatMoney(order.total, order.currency_code);
-
-                  return (
+              {loading && orders === null ? (
+                <LoadingRegion label="Loading orders">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
                     <div
-                      key={order.id}
-                      onClick={() => handleOpenDetail(order)}
+                      key={i}
                       style={{
                         display: 'grid',
                         gridTemplateColumns: '90px 130px minmax(150px, 1fr) minmax(170px, 1fr) 140px 150px 190px 36px',
@@ -1827,62 +1819,136 @@ export default function OrdersPage() {
                         boxSizing: 'border-box',
                         padding: '0 24px',
                         borderBottom: '1px solid #EDEFF3',
-                        fontSize: '16px',
-                        fontWeight: 500,
-                        color: '#111827',
-                        cursor: 'pointer',
-                        transition: 'background 0.12s',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAFC')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}
                     >
-                      <span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenDetail(order);
-                          }}
-                          aria-label={`Open order ${orderNo}`}
-                          style={{
-                            padding: 0,
-                            border: 0,
-                            background: 'transparent',
-                            fontFamily: 'inherit',
-                            fontSize: '16px',
-                            fontWeight: 600,
-                            color: '#111827',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {orderNo}
-                        </button>
-                      </span>
-
-                      <span style={{ color: '#4B5263' }}>{orderDate}</span>
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px' }}>
-                        {customerName}
-                      </span>
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px', color: '#4B5263' }}>
-                        {salesChannel}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span aria-hidden="true" style={{ width: '8px', height: '8px', borderRadius: '50%', flex: 'none', background: payInfo.tone.dot }} />
-                        {payInfo.label}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span aria-hidden="true" style={{ width: '8px', height: '8px', borderRadius: '50%', flex: 'none', background: fulInfo.tone.dot }} />
-                        {fulInfo.label}
-                      </span>
-                      <span style={{ textAlign: 'right', paddingRight: '12px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                        {formattedTotal}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                        <TunisiaFlag />
-                      </span>
+                      <Skeleton width={60} height={16} />
+                      <Skeleton width={90} height={14} />
+                      <Skeleton width="70%" height={16} />
+                      <Skeleton width="60%" height={16} />
+                      <Skeleton width={88} height={26} radius={13} />
+                      <Skeleton width={100} height={26} radius={13} />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '12px' }}>
+                        <Skeleton width={80} height={16} />
+                      </div>
+                      <span />
                     </div>
-                  );
-                })
+                  ))}
+                </LoadingRegion>
+              ) : loadError && orders === null ? (
+                <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#6B7280' }}>
+                  <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>The orders could not be loaded.</p>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: '#B42318' }}>{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={loadOrders}
+                    style={{
+                      marginTop: '16px',
+                      height: '40px',
+                      padding: '0 22px',
+                      border: 0,
+                      borderRadius: '20px',
+                      background: 'var(--accent)',
+                      color: '#FFFFFF',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : filteredOrders.length > 0 ? (
+                <div style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+                  {filteredOrders.map((order) => {
+                    const stage = getFulfillmentStage(order);
+                    const fulInfo = getFulfillmentBadgeInfo(stage);
+                    const payInfo = getPaymentBadgeInfo(order.payment_status);
+
+                    const orderNo = `#${order.display_id || order.id.slice(-6)}`;
+                    const orderDate = new Date(order.created_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    });
+                    const customerName = `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim() || order.customer?.email || '—';
+                    const salesChannel = order.sales_channel?.name || '—';
+                    const formattedTotal = formatMoney(order.total, order.currency_code);
+
+                    return (
+                      <div
+                        key={order.id}
+                        onClick={() => handleOpenDetail(order)}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '90px 130px minmax(150px, 1fr) minmax(170px, 1fr) 140px 150px 190px 36px',
+                          alignItems: 'center',
+                          height: '64px',
+                          boxSizing: 'border-box',
+                          padding: '0 24px',
+                          borderBottom: '1px solid #EDEFF3',
+                          fontSize: '16px',
+                          fontWeight: 500,
+                          color: '#111827',
+                          cursor: 'pointer',
+                          transition: 'background 0.12s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAFC')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                      >
+                        <span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDetail(order);
+                            }}
+                            aria-label={`Open order ${orderNo}`}
+                            style={{
+                              padding: 0,
+                              border: 0,
+                              background: 'transparent',
+                              fontFamily: 'inherit',
+                              fontSize: '16px',
+                              fontWeight: 600,
+                              color: '#111827',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {orderNo}
+                          </button>
+                        </span>
+
+                        <span style={{ color: '#4B5263' }}>{orderDate}</span>
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px' }}>
+                          {customerName}
+                        </span>
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px', color: '#4B5263' }}>
+                          {salesChannel}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span aria-hidden="true" style={{ width: '8px', height: '8px', borderRadius: '50%', flex: 'none', background: payInfo.tone.dot }} />
+                          {payInfo.label}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span aria-hidden="true" style={{ width: '8px', height: '8px', borderRadius: '50%', flex: 'none', background: fulInfo.tone.dot }} />
+                          {fulInfo.label}
+                        </span>
+                        <span style={{ textAlign: 'right', paddingRight: '12px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                          {formattedTotal}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          {order.shipping_address?.country_code?.toUpperCase() === 'TN' ? (
+                            <TunisiaFlag />
+                          ) : order.shipping_address?.country_code ? (
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#6B7280' }}>
+                              {order.shipping_address.country_code.toUpperCase()}
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <div
                   role="status"
@@ -1896,7 +1962,7 @@ export default function OrdersPage() {
                     color: '#4B5263',
                   }}
                 >
-                  No orders match your search.
+                  {search ? 'No orders match your search.' : 'No orders yet.'}
                 </div>
               )}
             </div>

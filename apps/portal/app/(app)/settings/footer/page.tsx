@@ -36,6 +36,7 @@ import type { FooterTab } from '@/lib/footer';
 import { CollapsibleRow, RowBadge } from '@/components/settings/CollapsibleRow';
 import { SaveBar } from '@/components/settings/SaveBar';
 import { SettingsTabs, panelProps } from '@/components/settings/SettingsTabs';
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 import {
   cardStyle,
   counterStyle,
@@ -109,8 +110,13 @@ function PagePreview({ text }: { text: string }) {
   }
   if (!current) {
     return (
-      <div style={{ ...box, color: '#6B7280', fontSize: '14px' }} data-testid="page-preview">
-        Loading the preview...
+      <div style={box} data-testid="page-preview">
+        <LoadingRegion label="Loading the preview" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Skeleton width="45%" height={24} />
+          <Skeleton width="100%" height={16} />
+          <Skeleton width="90%" height={16} />
+          <Skeleton width="75%" height={16} />
+        </LoadingRegion>
       </div>
     );
   }
@@ -258,8 +264,33 @@ export default function FooterSettingsPage() {
     }
   };
 
-  if (checking) {
-    return <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>;
+  if (checking || loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <section style={cardStyle}>
+          <div style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #E6E8EC' }}>
+            <Skeleton width={110} height={40} radius={20} />
+            <Skeleton width={100} height={40} radius={20} />
+            <Skeleton width={80} height={40} radius={20} />
+            <Skeleton width={130} height={40} radius={20} />
+          </div>
+          <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Skeleton width={180} height={24} />
+            <Skeleton width={320} height={14} />
+            <div style={{ display: 'grid', gap: '16px', marginTop: '8px', maxWidth: '640px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <Skeleton width={100} height={14} />
+                <Skeleton width="100%" height={44} radius={22} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <Skeleton width={100} height={14} />
+                <Skeleton width="100%" height={88} radius={16} />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   if (isPlatformAdmin) {
@@ -271,10 +302,6 @@ export default function FooterSettingsPage() {
         </p>
       </section>
     );
-  }
-
-  if (loading) {
-    return <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading...</div>;
   }
 
   if (loadError) {

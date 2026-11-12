@@ -80,7 +80,7 @@ const notice = (tone: 'warn' | 'info'): React.CSSProperties => ({
   color: tone === 'warn' ? '#92400E' : '#374151',
 });
 
-export default function VariantsEditor({ value, onChange, original, startPrice, startStock, currency = 'TND' }: Props) {
+export default function VariantsEditor({ value, onChange, original, startPrice, startStock, currency = '' }: Props) {
   // What is typed in each option's "add a value" box, by option key
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [bulkPrice, setBulkPrice] = useState('');
@@ -287,7 +287,7 @@ export default function VariantsEditor({ value, onChange, original, startPrice, 
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder={`Price for all (${currency})`}
+                  placeholder={currency ? `Price for all (${currency})` : 'Price for all'}
                   value={bulkPrice}
                   onChange={(e) => setBulkPrice(e.target.value)}
                   style={{ ...cellInput, width: '170px' }}
@@ -355,7 +355,7 @@ export default function VariantsEditor({ value, onChange, original, startPrice, 
                           min="0"
                           step="0.01"
                           disabled={!row.enabled}
-                          placeholder={`Price (${currency})`}
+                          placeholder={currency ? `Price (${currency})` : 'Price'}
                           value={row.price}
                           onChange={(e) => setRow(row.key, { price: e.target.value })}
                           style={cellInput}

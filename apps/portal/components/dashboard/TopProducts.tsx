@@ -17,7 +17,7 @@ interface TopProductsProps {
   currencyCode?: string;
 }
 
-export default function TopProducts({ products = [], currencyCode = 'TND' }: TopProductsProps) {
+export default function TopProducts({ products = [], currencyCode = '' }: TopProductsProps) {
   const maxQty = products.length > 0 ? Math.max(...products.map((p) => p.quantity), 1) : 1;
 
   return (
