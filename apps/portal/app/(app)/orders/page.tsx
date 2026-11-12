@@ -9,6 +9,7 @@ import {
   shipMerchantOrder,
   deliverMerchantOrder,
   captureMerchantPayment,
+  cancelMerchantOrder,
   MerchantOrder,
 } from '@/lib/medusa';
 import { SearchIcon } from '@/components/icons';
@@ -45,7 +46,8 @@ function getPaymentBadgeInfo(paymentStatus?: string): { label: string; tone: Sta
 
 function getFulfillmentStage(order: MerchantOrder): number {
   // 0: Not fulfilled, 1: Fulfilled, 2: Shipped, 3: Delivered
-  const fulfillments = order.fulfillments || [];
+  // Canceled fulfillments (canceled_at set) are ignored – they do not count as fulfilled.
+  const fulfillments = (order.fulfillments || []).filter((f) => !f.canceled_at);
   if (fulfillments.length === 0) return 0;
   const anyDelivered = fulfillments.some((f) => f.delivered_at);
   if (anyDelivered) return 3;
@@ -138,6 +140,11 @@ export default function OrdersPage() {
   const [openTax, setOpenTax] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Cancel order dialog state
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   // Fulfill Items modal state
   const [showFulfillModal, setShowFulfillModal] = useState(false);
@@ -344,13 +351,32 @@ export default function OrdersPage() {
     }
   };
 
+  // 5. Cancel order
+  const handleCancelOrder = async () => {
+    if (!detailOrder) return;
+    setCancelLoading(true);
+    setCancelError(null);
+    try {
+      await cancelMerchantOrder(detailOrder.id);
+      setShowCancelDialog(false);
+      setNotice('Order canceled.');
+      await refreshDetail(detailOrder.id);
+    } catch (err: any) {
+      setCancelError(err.message || 'Could not cancel the order. Please try again.');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   // ══════════════════════════════════════════════════════════════════════════
   // DETAIL VIEW
-  // ══════════════════════════════════════════════════════════════════════════
   if (selectedOrderId && detailOrder) {
     const o = detailOrder;
     const stage = getFulfillmentStage(o);
-    const fulInfo = getFulfillmentBadgeInfo(stage);
+    // B4: canceled order shows "Canceled" badge (gray) in the detail panel
+    const fulInfo = o.status === 'canceled'
+      ? { label: 'Canceled', tone: TONES.gray }
+      : getFulfillmentBadgeInfo(stage);
 
     const paymentCollections = o.payment_collections || [];
     const allPayments = paymentCollections.flatMap((pc) => pc.payments || []);
@@ -697,6 +723,117 @@ export default function OrdersPage() {
                     }}
                   >
                     {actionLoading ? 'Fulfilling...' : 'Confirm Fulfillment'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Cancel Order Confirmation Dialog ── */}
+        {showCancelDialog && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Cancel order"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+            }}
+          >
+            {/* Backdrop */}
+            <div
+              onClick={() => { if (!cancelLoading) { setShowCancelDialog(false); setCancelError(null); } }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(0,0,0,0.45)',
+                backdropFilter: 'blur(3px)',
+              }}
+            />
+            {/* Panel */}
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                background: '#FFFFFF',
+                borderRadius: '20px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+                width: '100%',
+                maxWidth: '460px',
+                fontFamily: 'Urbanist, sans-serif',
+              }}
+            >
+              <div style={{ padding: '28px 28px 24px' }}>
+                {/* Icon */}
+                <div
+                  style={{
+                    width: '48px', height: '48px', borderRadius: '50%',
+                    background: '#FEF2F2', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', marginBottom: '16px',
+                  }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B42318" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" />
+                  </svg>
+                </div>
+                {/* Title */}
+                <h2 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, color: '#111827', lineHeight: '26px' }}>
+                  Cancel order {`#${detailOrder?.display_id || detailOrder?.id?.slice(-6)}`}?
+                </h2>
+                {/* Body */}
+                <p style={{ margin: '0 0 20px', fontSize: '15px', fontWeight: 500, color: '#4B5563', lineHeight: '22px' }}>
+                  The order will be canceled and the items go back to stock. If the payment was already captured it is refunded. This cannot be undone.
+                </p>
+                {/* Inline error */}
+                {cancelError && (
+                  <div
+                    role="alert"
+                    style={{
+                      marginBottom: '16px', padding: '12px 16px',
+                      border: '1px solid #FECACA', borderRadius: '12px',
+                      background: '#FEF2F2', color: '#B42318',
+                      fontSize: '14px', fontWeight: 500,
+                    }}
+                  >
+                    {cancelError}
+                  </div>
+                )}
+                {/* Buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button
+                    type="button"
+                    disabled={cancelLoading}
+                    onClick={() => { setShowCancelDialog(false); setCancelError(null); }}
+                    style={{
+                      height: '40px', padding: '0 20px',
+                      border: '1px solid #E6E8EC', borderRadius: '20px',
+                      background: '#FFFFFF', fontSize: '15px', fontWeight: 600,
+                      color: '#4B5563', cursor: cancelLoading ? 'not-allowed' : 'pointer',
+                      opacity: cancelLoading ? 0.7 : 1,
+                    }}
+                  >
+                    Keep order
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancelLoading}
+                    onClick={handleCancelOrder}
+                    style={{
+                      height: '40px', padding: '0 20px',
+                      border: 0, borderRadius: '20px',
+                      background: '#B42318', color: '#FFFFFF',
+                      fontSize: '15px', fontWeight: 600,
+                      cursor: cancelLoading ? 'not-allowed' : 'pointer',
+                      opacity: cancelLoading ? 0.7 : 1,
+                    }}
+                  >
+                    {cancelLoading ? 'Canceling...' : 'Cancel order'}
                   </button>
                 </div>
               </div>
@@ -1362,77 +1499,110 @@ export default function OrdersPage() {
 
               {/* Action buttons with real Medusa workflows */}
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px 24px' }}>
-                {stage === 0 && (
-                  <button
-                    type="button"
-                    disabled={fulfillLoading || actionLoading}
-                    onClick={handleFulfillItems}
-                    style={{
-                      height: '40px',
-                      boxSizing: 'border-box',
-                      padding: '0 22px',
-                      border: 0,
-                      borderRadius: '20px',
-                      background: 'var(--accent)',
-                      color: '#FFFFFF',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      cursor: (fulfillLoading || actionLoading) ? 'not-allowed' : 'pointer',
-                      opacity: (fulfillLoading || actionLoading) ? 0.7 : 1,
-                    }}
-                  >
-                    {fulfillLoading ? 'Loading...' : 'Fulfill items'}
-                  </button>
-                )}
-                {stage === 1 && (
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={handleMarkShipped}
-                    style={{
-                      height: '40px',
-                      boxSizing: 'border-box',
-                      padding: '0 22px',
-                      border: 0,
-                      borderRadius: '20px',
-                      background: 'var(--accent)',
-                      color: '#FFFFFF',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {actionLoading ? 'Updating...' : 'Mark as shipped'}
-                  </button>
-                )}
-                {stage === 2 && (
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={handleMarkDelivered}
-                    style={{
-                      height: '40px',
-                      boxSizing: 'border-box',
-                      padding: '0 22px',
-                      border: 0,
-                      borderRadius: '20px',
-                      background: 'var(--accent)',
-                      color: '#FFFFFF',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {actionLoading ? 'Updating...' : 'Mark as delivered'}
-                  </button>
-                )}
-                {stage === 3 && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 500, color: '#17803F' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" /><path d="m8 12 3 3 5-6" />
-                    </svg>
-                    Delivered to the customer
+                {o.status === 'canceled' ? (
+                  /* B4: canceled order – hide all action buttons, show gray line */
+                  <span style={{ fontSize: '15px', fontWeight: 500, color: '#6B7280' }}>
+                    This order was canceled.
                   </span>
+                ) : (
+                  <>
+                    {/* B1: Cancel order button – left of button row, only when stage 0 or 1 */}
+                    {(stage === 0 || stage === 1) && (
+                      <button
+                        type="button"
+                        disabled={actionLoading || cancelLoading}
+                        onClick={() => { setCancelError(null); setShowCancelDialog(true); }}
+                        style={{
+                          height: '40px',
+                          boxSizing: 'border-box',
+                          padding: '0 20px',
+                          border: '1px solid #FECACA',
+                          borderRadius: '20px',
+                          background: '#FFFFFF',
+                          color: '#B42318',
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          cursor: (actionLoading || cancelLoading) ? 'not-allowed' : 'pointer',
+                          opacity: (actionLoading || cancelLoading) ? 0.7 : 1,
+                          marginRight: 'auto',
+                        }}
+                      >
+                        Cancel order
+                      </button>
+                    )}
+                    {stage === 0 && (
+                      <button
+                        type="button"
+                        disabled={fulfillLoading || actionLoading}
+                        onClick={handleFulfillItems}
+                        style={{
+                          height: '40px',
+                          boxSizing: 'border-box',
+                          padding: '0 22px',
+                          border: 0,
+                          borderRadius: '20px',
+                          background: 'var(--accent)',
+                          color: '#FFFFFF',
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          cursor: (fulfillLoading || actionLoading) ? 'not-allowed' : 'pointer',
+                          opacity: (fulfillLoading || actionLoading) ? 0.7 : 1,
+                        }}
+                      >
+                        {fulfillLoading ? 'Loading...' : 'Fulfill items'}
+                      </button>
+                    )}
+                    {stage === 1 && (
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={handleMarkShipped}
+                        style={{
+                          height: '40px',
+                          boxSizing: 'border-box',
+                          padding: '0 22px',
+                          border: 0,
+                          borderRadius: '20px',
+                          background: 'var(--accent)',
+                          color: '#FFFFFF',
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {actionLoading ? 'Updating...' : 'Mark as shipped'}
+                      </button>
+                    )}
+                    {stage === 2 && (
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={handleMarkDelivered}
+                        style={{
+                          height: '40px',
+                          boxSizing: 'border-box',
+                          padding: '0 22px',
+                          border: 0,
+                          borderRadius: '20px',
+                          background: 'var(--accent)',
+                          color: '#FFFFFF',
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {actionLoading ? 'Updating...' : 'Mark as delivered'}
+                      </button>
+                    )}
+                    {stage === 3 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 500, color: '#17803F' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" /><path d="m8 12 3 3 5-6" />
+                        </svg>
+                        Delivered to the customer
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </section>
@@ -1633,7 +1803,6 @@ export default function OrdersPage() {
 
   // ══════════════════════════════════════════════════════════════════════════
   // LIST VIEW
-  // ══════════════════════════════════════════════════════════════════════════
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, listTotal);
   const footerText = search.trim()
@@ -1861,7 +2030,10 @@ export default function OrdersPage() {
                 <div style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
                   {filteredOrders.map((order) => {
                     const stage = getFulfillmentStage(order);
-                    const fulInfo = getFulfillmentBadgeInfo(stage);
+                    // B5: canceled order shows "Canceled" in the fulfillment column
+                    const fulInfo = order.status === 'canceled'
+                      ? { label: 'Canceled', tone: TONES.gray }
+                      : getFulfillmentBadgeInfo(stage);
                     const payInfo = getPaymentBadgeInfo(order.payment_status);
 
                     const orderNo = `#${order.display_id || order.id.slice(-6)}`;
