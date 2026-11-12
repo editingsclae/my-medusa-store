@@ -146,7 +146,7 @@ export default function DashboardPage() {
         {
           title: 'Pending fulfillment',
           value: String(analytics.pending_orders),
-          deltaCaption: `${analytics.fulfilled_orders} already fulfilled`,
+          deltaCaption: `${analytics.fulfilled_orders} shipped`,
           iconName: 'truck',
         },
       ]

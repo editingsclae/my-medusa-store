@@ -21,6 +21,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       "total",
       "status",
       "fulfillments.id",
+      "fulfillments.shipped_at",
+      "fulfillments.delivered_at",
+      "fulfillments.canceled_at",
       "created_at",
       "currency_code",
       "items.title",
@@ -55,14 +58,19 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     const total = Number(order.total) || 0
     totalSales += total
 
-    const orderFulfillments = (order as any).fulfillments
-    const hasFulfillment = Array.isArray(orderFulfillments) && orderFulfillments.length > 0
-
-    if (order.status === "pending" || !hasFulfillment) {
-      pendingOrders++
-    }
-    if (hasFulfillment) {
-      fulfilledOrders++
+    // Same stages as the Orders page: no fulfillment, fulfilled, shipped, delivered.
+    // "Awaiting shipping" = not shipped yet; "Fulfilled & shipped" = shipped or delivered.
+    // A canceled order is neither: it is not waiting for anything.
+    if (order.status !== "canceled") {
+      const activeFulfillments = (((order as any).fulfillments || []) as any[]).filter(
+        (f) => f && !f.canceled_at
+      )
+      const isShipped = activeFulfillments.some((f) => f.shipped_at || f.delivered_at)
+      if (isShipped) {
+        fulfilledOrders++
+      } else {
+        pendingOrders++
+      }
     }
 
     const dayKey = new Date(order.created_at).toISOString().split("T")[0]

@@ -28,9 +28,14 @@ export default function RevenueChart({ data }: RevenueChartProps) {
     return Number.isFinite(max) && max > 0 ? max : 0;
   }, [data]);
 
+  // A "nice" top of the scale (1, 2 or 5 times a power of ten) that fits the real data,
+  // so a small shop and a big shop both get a readable chart.
   const yMax = useMemo(() => {
-    if (maxVal <= 0) return 2000;
-    return Math.ceil(maxVal / 2000) * 2000;
+    if (maxVal <= 0) return 100;
+    const exp = Math.pow(10, Math.floor(Math.log10(maxVal)));
+    const f = maxVal / exp;
+    const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+    return Math.max(100, nice * exp);
   }, [maxVal]);
 
   const points = useMemo(() => {
@@ -65,7 +70,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
   // Y-axis grid step steps: 0, 2000, 4000, ... yMax
   const ySteps = useMemo(() => {
     const steps: number[] = [];
-    const stepSize = yMax > 0 ? Math.max(1, yMax / 4) : 2000;
+    const stepSize = yMax > 0 ? yMax / 4 : 25;
     for (let s = 0; s <= yMax; s += stepSize) {
       steps.push(s);
     }
@@ -155,7 +160,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
               color: '#4B5263',
             }}
           >
-            Daily revenue, last 30 days
+            {data.length > 0 ? `Daily revenue, last ${data.length} days` : 'Daily revenue'}
           </p>
         </div>
 
@@ -220,7 +225,9 @@ export default function RevenueChart({ data }: RevenueChartProps) {
           ref={containerRef}
           tabIndex={0}
           role="img"
-          aria-label="Daily revenue for the last 30 days, rising from about $3,500 to about $5,000 a day. Use left and right arrow keys to navigate days."
+          aria-label={`Daily revenue for the last ${data.length} days${
+            maxVal > 0 ? `, highest day ${data.find((d) => d.revenue === maxVal)?.revenueFormatted ?? ''}` : ', no sales yet'
+          }. Use left and right arrow keys to navigate days.`}
           onPointerMove={handlePointerMove}
           onPointerLeave={handlePointerLeave}
           onKeyDown={handleKeyDown}
@@ -239,7 +246,8 @@ export default function RevenueChart({ data }: RevenueChartProps) {
           {/* Absolutely-positioned Y-gridlines and Y-labels */}
           {ySteps.map((step) => {
             const topPct = ((plotBottom - (step / yMax) * plotHeight) / chartHeight) * 100;
-            const labelText = step === 0 ? '$0' : `$${step / 1000}K`;
+            // Just the number: the currency is shown in the values themselves.
+            const labelText = step >= 1000 ? `${Number((step / 1000).toFixed(2))}K` : String(Number(step.toFixed(2)));
             return (
               <React.Fragment key={step}>
                 {/* Hairline Grid */}
