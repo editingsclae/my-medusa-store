@@ -3,96 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getMerchantCustomers, getMerchantCustomer, MerchantCustomer, MerchantOrder } from '@/lib/medusa';
 import { SearchIcon } from '@/components/icons';
-
-// ─── Fallback preview data ───────────────────────────────────────────────────
-const PREVIEW_CUSTOMERS: MerchantCustomer[] = [
-  {
-    id: 'cus_preview_1',
-    email: 'olivia.martin@example.com',
-    first_name: 'Olivia',
-    last_name: 'Martin',
-    name: 'Olivia Martin',
-    phone: '+1 503 555 0101',
-    has_account: true,
-    account_status: 'Registered',
-    created_at: '2025-03-04T10:00:00Z',
-    addresses: [
-      { first_name: 'Olivia', last_name: 'Martin', address_1: '48 Maple Street, Apt 5', city: 'Portland', postal_code: '97205', country_code: 'us', phone: '+1 503 555 0101' },
-    ],
-    orders: [
-      { id: 'ord_1a', display_id: 10248, status: 'processing', created_at: '2026-10-12T10:00:00Z', currency_code: 'USD', total: 408, items: [{ id: 'i1', title: 'Chair', quantity: 1, unit_price: 245 }, { id: 'i2', title: 'Lamp', quantity: 1, unit_price: 163 }] },
-      { id: 'ord_1b', display_id: 10192, status: 'completed', created_at: '2026-09-02T10:00:00Z', currency_code: 'USD', total: 264, items: [{ id: 'i3', title: 'Desk', quantity: 1, unit_price: 264 }] },
-    ],
-  },
-  {
-    id: 'cus_preview_2',
-    email: 'liam.johnson@example.com',
-    first_name: 'Liam',
-    last_name: 'Johnson',
-    name: 'Liam Johnson',
-    phone: '+1 416 555 0122',
-    has_account: true,
-    account_status: 'Registered',
-    created_at: '2025-04-19T10:00:00Z',
-    addresses: [
-      { first_name: 'Liam', last_name: 'Johnson', address_1: '1204 Queen Street West', city: 'Toronto', postal_code: 'M6K 1L2', country_code: 'ca', phone: '+1 416 555 0122' },
-    ],
-    orders: [
-      { id: 'ord_2a', display_id: 10241, status: 'shipped', created_at: '2026-10-09T10:00:00Z', currency_code: 'USD', total: 364, items: [{ id: 'i4', title: 'Monitor', quantity: 1, unit_price: 364 }] },
-    ],
-  },
-  {
-    id: 'cus_preview_3',
-    email: 'emma.dubois@example.com',
-    first_name: 'Emma',
-    last_name: 'Dubois',
-    name: 'Emma Dubois',
-    phone: '',
-    has_account: false,
-    account_status: 'Guest',
-    created_at: '2025-08-02T10:00:00Z',
-    addresses: [
-      { first_name: 'Emma', last_name: 'Dubois', address_1: '12 Rue de la République', city: 'Lyon', postal_code: '69002', country_code: 'fr', phone: '' },
-    ],
-    orders: [
-      { id: 'ord_3a', display_id: 10229, status: 'completed', created_at: '2026-10-03T10:00:00Z', currency_code: 'USD', total: 398, items: [{ id: 'i5', title: 'Keyboard', quantity: 1, unit_price: 264 }, { id: 'i6', title: 'Mouse', quantity: 1, unit_price: 134 }] },
-    ],
-  },
-  {
-    id: 'cus_preview_4',
-    email: 'noah.williams@example.com',
-    first_name: 'Noah',
-    last_name: 'Williams',
-    name: 'Noah Williams',
-    phone: '+1 512 555 0177',
-    has_account: true,
-    account_status: 'Registered',
-    created_at: '2025-09-27T10:00:00Z',
-    addresses: [
-      { first_name: 'Noah', last_name: 'Williams', address_1: '905 Red River Street', city: 'Austin', postal_code: '78701', country_code: 'us', phone: '+1 512 555 0177' },
-    ],
-    orders: [
-      { id: 'ord_4a', display_id: 10253, status: 'processing', created_at: '2026-10-15T10:00:00Z', currency_code: 'USD', total: 422, items: [{ id: 'i7', title: 'Speaker', quantity: 1, unit_price: 422 }] },
-    ],
-  },
-  {
-    id: 'cus_preview_5',
-    email: 'amira.bensalah@example.com',
-    first_name: 'Amira',
-    last_name: 'Ben Salah',
-    name: 'Amira Ben Salah',
-    phone: '+216 71 555 0190',
-    has_account: true,
-    account_status: 'Registered',
-    created_at: '2026-02-23T10:00:00Z',
-    addresses: [
-      { first_name: 'Amira', last_name: 'Ben Salah', address_1: '21 Avenue Habib Bourguiba', city: 'Tunis', postal_code: '1000', country_code: 'tn', phone: '+216 71 555 0190' },
-    ],
-    orders: [
-      { id: 'ord_5a', display_id: 10250, status: 'shipped', created_at: '2026-10-13T10:00:00Z', currency_code: 'TND', total: 599, items: [{ id: 'i8', title: 'Gaming Chair', quantity: 1, unit_price: 364 }, { id: 'i9', title: 'Headset', quantity: 1, unit_price: 235 }] },
-    ],
-  },
-];
+import { Skeleton, LoadingRegion } from '@/components/ui/Skeleton';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 function OrderStatusBadge({ status }: { status: string }) {
@@ -200,7 +111,9 @@ function UpDownIcon() {
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<MerchantCustomer[] | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
+  // Starts true: the first paint is the skeleton, never a made-up list.
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 9;
@@ -213,6 +126,7 @@ export default function CustomersPage() {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await getMerchantCustomers({
         limit: pageSize,
         offset: (page - 1) * pageSize,
@@ -220,8 +134,8 @@ export default function CustomersPage() {
       });
       setCustomers(res.customers || []);
       setTotalCount(res.count ?? res.customers?.length ?? 0);
-    } catch {
-      setCustomers(null);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'The customers could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -231,18 +145,9 @@ export default function CustomersPage() {
     fetchCustomers();
   }, [page, search]);
 
-  const displayCustomers: MerchantCustomer[] =
-    customers !== null
-      ? customers
-      : PREVIEW_CUSTOMERS.filter((c) => {
-          const q = search.toLowerCase();
-          return (
-            (c.name || '').toLowerCase().includes(q) ||
-            c.email.toLowerCase().includes(q)
-          );
-        });
+  const displayCustomers: MerchantCustomer[] = customers ?? [];
 
-  const listTotal = customers !== null ? totalCount : PREVIEW_CUSTOMERS.length;
+  const listTotal = customers !== null ? totalCount : 0;
   const totalPages = Math.max(1, Math.ceil(listTotal / pageSize));
 
   const handleRowClick = async (cust: MerchantCustomer) => {
@@ -543,8 +448,41 @@ export default function CustomersPage() {
 
             {/* Rows */}
             <div>
-              {loading ? (
-                <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>Loading customers...</div>
+              {loading && customers === null ? (
+                <LoadingRegion label="Loading customers">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(260px, 1.5fr) minmax(160px, 1fr) 170px 170px 32px',
+                        alignItems: 'center', height: '64px', boxSizing: 'border-box',
+                        padding: '0 24px', borderBottom: '1px solid #EDEFF3',
+                      }}
+                    >
+                      <Skeleton width="70%" height={16} />
+                      <Skeleton width="60%" height={16} />
+                      <Skeleton width={96} height={26} radius={13} />
+                      <Skeleton width={90} height={14} />
+                      <span />
+                    </div>
+                  ))}
+                </LoadingRegion>
+              ) : loadError && customers === null ? (
+                <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#6B7280' }}>
+                  <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>The customers could not be loaded.</p>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '14px' }}>{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={fetchCustomers}
+                    style={{
+                      marginTop: '16px', height: '40px', padding: '0 22px', border: 0, borderRadius: '20px',
+                      background: 'var(--accent)', color: '#FFFFFF', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                    }}
+                  >
+                    Try again
+                  </button>
+                </div>
               ) : displayCustomers.length > 0 ? (
                 displayCustomers.map((cust) => {
                   const isRegistered = cust.has_account || cust.account_status === 'Registered';

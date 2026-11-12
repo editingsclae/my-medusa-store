@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -14,17 +14,13 @@ import {
   LogoutIcon,
   MerchantsIcon,
 } from '@/components/icons';
-import { getMerchantMe, removeStoredToken } from '@/lib/medusa';
+import { removeStoredToken } from '@/lib/medusa';
+import { useMerchant } from './MerchantContext';
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
-
-  useEffect(() => {
-    getMerchantMe()
-      .then((profile) => setIsPlatformAdmin(Boolean(profile.is_super_admin)))
-      .catch(() => setIsPlatformAdmin(false));
-  }, []);
+  const { profile } = useMerchant();
+  const isPlatformAdmin = Boolean(profile?.is_super_admin);
 
   const isDashboardActive = pathname === '/dashboard';
   const isProductsActive = pathname === '/products' || pathname.startsWith('/products/');
@@ -350,6 +346,7 @@ export default function Sidebar() {
         {isPlatformAdmin && (
           <Link
             href="/merchants"
+            className="page-enter"
             aria-current={isMerchantsActive ? 'page' : undefined}
             style={{
               display: 'flex',

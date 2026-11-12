@@ -102,24 +102,26 @@ export default function KpiTile({ data }: KpiTileProps) {
               marginTop: '8px',
             }}
           >
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                height: '24px',
-                padding: '0 8px',
-                gap: '4px',
-                borderRadius: '12px',
-                background: data.isUp ? '#F2FBF6' : '#FFF5F5',
-                border: data.isUp ? '1px solid #9BDDB4' : '1px solid #FCA5A5',
-                color: data.isUp ? '#17803F' : '#DC2626',
-                fontSize: '14px',
-                fontWeight: 600,
-              }}
-            >
-              {data.isUp ? <ArrowUpIcon /> : <ArrowDownIcon />}
-              {data.delta}
-            </span>
+            {data.delta && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  height: '24px',
+                  padding: '0 8px',
+                  gap: '4px',
+                  borderRadius: '12px',
+                  background: data.isUp ? '#F2FBF6' : '#FFF5F5',
+                  border: data.isUp ? '1px solid #9BDDB4' : '1px solid #FCA5A5',
+                  color: data.isUp ? '#17803F' : '#DC2626',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
+              >
+                {data.isUp ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                {data.delta}
+              </span>
+            )}
             <span
               style={{
                 fontSize: '14px',
@@ -133,12 +135,14 @@ export default function KpiTile({ data }: KpiTileProps) {
           </div>
         </div>
 
-        <div style={{ paddingBottom: '4px' }}>
-          <Sparkline
-            series={data.sparklineSeries}
-            ariaLabel={data.sparklineAriaLabel}
-          />
-        </div>
+        {data.sparklineSeries && data.sparklineSeries.length >= 2 && (
+          <div style={{ paddingBottom: '4px' }}>
+            <Sparkline
+              series={data.sparklineSeries}
+              ariaLabel={data.sparklineAriaLabel ?? `${data.title} trend`}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

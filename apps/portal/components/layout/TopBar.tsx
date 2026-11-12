@@ -1,21 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { SearchIcon, ChevronDownIcon, LogoutIcon } from '../icons';
-import { getMerchantMe, MerchantProfile, removeStoredToken } from '@/lib/medusa';
+import { removeStoredToken } from '@/lib/medusa';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useMerchant } from './MerchantContext';
 
 export default function TopBar() {
-  const [profile, setProfile] = useState<MerchantProfile | null>(null);
+  const { profile, loading } = useMerchant();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  useEffect(() => {
-    getMerchantMe()
-      .then(setProfile)
-      .catch(() => {});
-  }, []);
-
-  const merchantTitle = profile?.sales_channel?.name || profile?.user?.first_name || 'Merchant Store';
-  const merchantEmail = profile?.user?.email || 'Logged In';
+  // No made-up names: while the profile loads the button shows skeletons, and if it
+  // could not be loaded it shows a plain "Account" label.
+  const merchantTitle = profile?.sales_channel?.name || profile?.user?.first_name || 'Account';
+  const merchantEmail = profile?.user?.email || '';
 
   return (
     <header
@@ -83,13 +81,25 @@ export default function TopBar() {
             color: '#111827',
           }}
         >
-          <span style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)', color: '#FFFFFF', fontWeight: 600 }}>
-            {merchantTitle.charAt(0).toUpperCase()}
-          </span>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: '96px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 600, lineHeight: '18px' }}>{merchantTitle}</span>
-            <span style={{ fontSize: '12px', fontWeight: 500, lineHeight: '16px', color: '#8A90A0' }}>{merchantEmail}</span>
-          </span>
+          {loading ? (
+            <>
+              <Skeleton width={40} height={40} radius="50%" />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '96px' }}>
+                <Skeleton width={96} height={14} />
+                <Skeleton width={140} height={11} />
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)', color: '#FFFFFF', fontWeight: 600 }}>
+                {merchantTitle.charAt(0).toUpperCase()}
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: '96px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 600, lineHeight: '18px' }}>{merchantTitle}</span>
+                <span style={{ fontSize: '12px', fontWeight: 500, lineHeight: '16px', color: '#8A90A0' }}>{merchantEmail}</span>
+              </span>
+            </>
+          )}
           <ChevronDownIcon style={{ marginLeft: '8px', stroke: '#4B5263', strokeWidth: 2 }} />
         </button>
 
@@ -111,7 +121,7 @@ export default function TopBar() {
             <div style={{ padding: '8px 12px', borderBottom: '1px solid #F3F4F6' }}>
               <div style={{ fontSize: '12px', color: '#6B7280' }}>Signed in as</div>
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', wordBreak: 'break-all' }}>
-                {merchantEmail}
+                {merchantEmail || '—'}
               </div>
             </div>
             <button

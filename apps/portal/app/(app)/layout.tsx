@@ -1,9 +1,11 @@
 import React from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
+import { MerchantProvider } from '@/components/layout/MerchantContext';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
+    <MerchantProvider>
     <div
       style={{
         display: 'flex',
@@ -27,5 +29,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
     </div>
+    </MerchantProvider>
   );
 }

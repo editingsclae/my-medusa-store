@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { PRODUCTS_DATA, Product } from '../../lib/products';
+import { Product } from '../../lib/products';
+import { Skeleton, LoadingRegion } from '../ui/Skeleton';
 import { getMerchantProducts, deleteMerchantProduct, MerchantProduct } from '../../lib/medusa';
 import { summarizeVariants } from '../../lib/variants';
 import ProductRow from './ProductRow';
@@ -24,7 +25,9 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [liveProducts, setLiveProducts] = useState<MerchantProduct[] | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
+  // Starts true: the first paint is the skeleton, never a made-up list.
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -39,6 +42,7 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
   const fetchProducts = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await getMerchantProducts({
         limit: pageSize,
         offset: (page - 1) * pageSize,
@@ -47,8 +51,7 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
       setLiveProducts(res.products || []);
       setTotalCount(res.count ?? res.products?.length ?? 0);
     } catch (err) {
-      console.warn('Backend not reached or session pending, showing catalog preview');
-      setLiveProducts(null);
+      setLoadError(err instanceof Error ? err.message : 'The products could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +69,8 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
     }
   }, [totalPages, page]);
 
-  // Convert live products or use fallback mock
+  // Convert the live products. There is no sample list: until the first answer arrives the
+  // table shows skeleton rows, and a failed request shows an error with a retry button.
   const displayProducts: Product[] = liveProducts !== null
     ? liveProducts.map((p) => {
         // Several variants: the lowest to the highest price, and the stock of all of them
@@ -85,10 +89,7 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
           thumbnailUrl: p.thumbnail || p.images?.[0]?.url || null,
         };
       })
-    : PRODUCTS_DATA.filter((product) => {
-        const q = searchQuery.toLowerCase();
-        return product.name.toLowerCase().includes(q) || product.category.toLowerCase().includes(q);
-      });
+    : [];
 
   const allSelected =
     displayProducts.length > 0 && displayProducts.every((p) => selectedIds.includes(p.id));
@@ -164,7 +165,7 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
         }}
       >
         <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600, lineHeight: '44px' }}>
-          All Products ({liveProducts !== null ? totalCount : PRODUCTS_DATA.length})
+          All Products{liveProducts !== null ? ` (${totalCount})` : ''}
         </h2>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
           <label
@@ -375,20 +376,71 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
 
           {/* Body Rows */}
           <div>
-            {loading ? (
-              <div style={{ padding: '48px', textAlign: 'center', color: '#8A90A0' }}>
-                Loading catalog products...
+            {loading && liveProducts === null ? (
+              <LoadingRegion label="Loading products">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '38px minmax(220px, 1fr) 173px 156px 153px 160px 148px',
+                      alignItems: 'center',
+                      height: '72px',
+                      boxSizing: 'border-box',
+                      padding: '0 24px 0 26px',
+                      borderBottom: '1px solid #EDEFF3',
+                    }}
+                  >
+                    <Skeleton width={16} height={16} radius={4} />
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <Skeleton width={44} height={44} radius={10} />
+                      <Skeleton width="55%" height={16} />
+                    </span>
+                    <Skeleton width={90} height={14} />
+                    <Skeleton width={50} height={14} />
+                    <Skeleton width={70} height={14} />
+                    <Skeleton width={72} height={26} radius={13} />
+                    <Skeleton width={64} height={14} />
+                  </div>
+                ))}
+              </LoadingRegion>
+            ) : loadError && liveProducts === null ? (
+              <div role="alert" style={{ padding: '48px', textAlign: 'center', color: '#6B7280' }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>
+                  The products could not be loaded.
+                </p>
+                <p style={{ margin: '6px 0 0 0', fontSize: '14px' }}>{loadError}</p>
+                <button
+                  type="button"
+                  onClick={fetchProducts}
+                  style={{
+                    marginTop: '16px',
+                    height: '40px',
+                    padding: '0 22px',
+                    border: 0,
+                    borderRadius: '20px',
+                    background: 'var(--accent)',
+                    color: '#FFFFFF',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Try again
+                </button>
               </div>
             ) : displayProducts.length > 0 ? (
-              displayProducts.map((product) => (
-                <ProductRow
-                  key={product.id}
-                  product={product}
-                  checked={selectedIds.includes(product.id)}
-                  onToggle={handleToggle}
-                  onDelete={handleDeleteClick}
-                />
-              ))
+              <div style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+                {displayProducts.map((product) => (
+                  <ProductRow
+                    key={product.id}
+                    product={product}
+                    checked={selectedIds.includes(product.id)}
+                    onToggle={handleToggle}
+                    onDelete={handleDeleteClick}
+                  />
+                ))}
+              </div>
             ) : (
               <div style={{ padding: '48px', textAlign: 'center', color: '#6B7280' }}>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>
@@ -421,7 +473,7 @@ export default function ProductsCard({ refreshKey = 0 }: ProductsCardProps) {
       <Pagination
         currentPage={page}
         totalPages={totalPages}
-        totalCount={liveProducts !== null ? totalCount : displayProducts.length}
+        totalCount={liveProducts !== null ? totalCount : 0}
         pageSize={pageSize}
         onPageChange={(p) => setPage(p)}
       />
