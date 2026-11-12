@@ -571,6 +571,15 @@ export async function captureMerchantPayment(
   })
 }
 
+export async function cancelMerchantOrder(
+  orderId: string
+): Promise<{ order: { id: string; status: string } }> {
+  return apiFetch<{ order: { id: string; status: string } }>(
+    `/admin/merchant/orders/${orderId}/cancel`,
+    { method: "POST", body: JSON.stringify({}) }
+  )
+}
+
 // Customers
 export interface CustomerAddress {
   id?: string
