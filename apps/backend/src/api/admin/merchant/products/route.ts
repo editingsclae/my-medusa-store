@@ -9,6 +9,7 @@ import { hasVariantsDraft, parseVariantsDraft, variantTitle, type VariantsDraft 
 import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
 import { getDefaultShippingProfileId } from "../fulfillment"
 import { parseBadge, withBadge } from "../../../product-badge"
+import { baseHandle, isHandleTakenError, pickAvailableHandle, withRandomTag } from "../product-handle"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
@@ -113,6 +114,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const body = req.body as any
 
   if (!body.title) {
@@ -159,12 +161,27 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
   const initialStock = stockInput.ok ? stockInput.value : 10
 
+  // Handles are unique across ALL merchants. If another merchant (or this one) already
+  // has this address, a free one is picked, so the merchant never sees an error for it.
+  const handle = await pickAvailableHandle(
+    baseHandle(body.handle, body.title),
+    context.salesChannelId,
+    async (candidate) => {
+      const { data: found } = await query.graph({
+        entity: "product",
+        fields: ["id"],
+        filters: { handle: candidate },
+      })
+      return found.length > 0
+    }
+  )
+
   // Format product input for createProductsWorkflow
   const productInput: any = {
     title: body.title,
     subtitle: body.subtitle,
     description: body.description,
-    handle: body.handle,
+    handle,
     status: body.status || "published",
     thumbnail: body.thumbnail,
     images: body.images?.map((url: string | { url: string }) =>
@@ -211,10 +228,17 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     ]
   }
 
-  const { result } = await createProductsWorkflow(req.scope).run({
-    input: {
-      products: [productInput],
-    },
+  const runCreate = () =>
+    createProductsWorkflow(req.scope).run({ input: { products: [productInput] } })
+
+  // Two products saved at the very same moment can still pick the same handle:
+  // then one more try with a random tag.
+  const { result } = await runCreate().catch((err: unknown) => {
+    if (!isHandleTakenError(err)) {
+      throw err
+    }
+    productInput.handle = withRandomTag(handle)
+    return runCreate()
   })
 
   const createdProduct = result[0]
