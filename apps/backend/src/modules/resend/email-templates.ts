@@ -7,6 +7,8 @@
 
 export const EMAIL_TEMPLATES = {
   ORDER_PLACED: "order-placed",
+  ORDER_SHIPPED: "order-shipped",
+  ORDER_CANCELED: "order-canceled",
   EMAIL_VERIFICATION: "email-verification",
   PASSWORD_RESET: "password-reset",
 } as const
@@ -345,6 +347,158 @@ ${
 }
 
 // -------------------------------------------------------------
+// Order shipped and order canceled
+// -------------------------------------------------------------
+
+type OrderStatusCopy = {
+  heading: string
+  subject: (store: string, display: string) => string
+  intro: (store: string, display: string, order: EmailOrder) => string
+  // Shipped: where it goes and what to pay. Canceled: neither.
+  details: boolean
+  footer: (store: string) => string
+}
+
+function renderOrderStatus(
+  data: Record<string, unknown> | null | undefined,
+  template: string,
+  copy: OrderStatusCopy
+): RenderedEmail {
+  const order = data?.order as EmailOrder | undefined
+  if (!order || typeof order !== "object" || !order.id) {
+    throw new EmailDataError(`The ${template} email needs data.order with an id`)
+  }
+
+  const store = oneLine(order.sales_channel?.name, 60)
+  const display = oneLine(order.display_id ?? order.id, 40)
+  const firstName = oneLine(order.shipping_address?.first_name, 60)
+  const lines = orderLines(order)
+  const address = copy.details ? addressLines(order.shipping_address) : []
+  const total = formatMoney(order.total, order.currency_code)
+
+  const subject = copy.subject(store, display)
+  const greeting = firstName ? `Hi ${firstName},` : "Hello,"
+  const intro = copy.intro(store, display, order)
+  const footer = copy.footer(store)
+
+  const anyImage = lines.some((line) => line.image)
+  const itemRows = lines
+    .map((line) => {
+      const image = line.image
+        ? `<img src="${escapeHtml(line.image)}" width="56" height="56" alt="" style="display:block;width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #e4e4e7">`
+        : ""
+      const variant = line.variant
+        ? `<div style="font-size:12px;color:#71717a;margin-top:2px">${escapeHtml(line.variant)}</div>`
+        : ""
+      return `<tr>
+${anyImage ? `<td style="padding:12px 12px 12px 0;width:56px;vertical-align:top">${image}</td>` : ""}
+<td style="padding:12px 0;vertical-align:top"><div style="font-size:14px;font-weight:600;color:#18181b">${escapeHtml(line.name)}</div>${variant}<div style="font-size:12px;color:#71717a;margin-top:2px">Quantity: ${line.quantity}</div></td>
+</tr>`
+    })
+    .join("\n")
+
+  const addressHtml = address.map((line) => escapeHtml(line)).join("<br>")
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:${FONT}">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(intro)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5">
+<tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;border:1px solid #e4e4e7">
+<tr><td style="padding:24px 28px;border-bottom:1px solid #e4e4e7;font-size:18px;font-weight:800;letter-spacing:0.04em;color:#18181b">${escapeHtml(store || copy.heading)}</td></tr>
+<tr><td style="padding:28px 28px 8px">
+<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#18181b">${escapeHtml(copy.heading)}</h1>
+<p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#3f3f46">${escapeHtml(greeting)}</p>
+<p style="margin:0;font-size:14px;line-height:1.6;color:#3f3f46">${escapeHtml(intro)}</p>
+</td></tr>
+${
+  lines.length > 0
+    ? `<tr><td style="padding:16px 28px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e4e4e7">
+${itemRows}
+</table></td></tr>`
+    : ""
+}
+${
+  address.length > 0
+    ? `<tr><td style="padding:20px 28px 0"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#71717a;margin-bottom:6px">Delivery address</div><div style="font-size:14px;line-height:1.6;color:#3f3f46">${addressHtml}</div></td></tr>`
+    : ""
+}
+${
+  copy.details
+    ? `<tr><td style="padding:20px 28px 0"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#71717a;margin-bottom:6px">Payment</div><div style="font-size:14px;line-height:1.6;color:#3f3f46">Cash on delivery: <strong>${escapeHtml(total)}</strong></div></td></tr>`
+    : ""
+}
+<tr><td style="padding:28px;font-size:12px;line-height:1.6;color:#a1a1aa">${escapeHtml(footer)}</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+
+  const textLines: string[] = [store || copy.heading, "", greeting, intro]
+  if (lines.length > 0) {
+    textLines.push(
+      "",
+      "Items",
+      ...lines.map((line) => `- ${line.name}${line.variant ? ` (${line.variant})` : ""}: quantity ${line.quantity}`)
+    )
+  }
+  if (address.length > 0) {
+    textLines.push("", "Delivery address", ...address)
+  }
+  if (copy.details) {
+    textLines.push("", `Payment: cash on delivery, ${total}`)
+  }
+  textLines.push("", footer)
+
+  return { subject: oneLine(subject, 200), html, text: textLines.join("\n"), fromName: store || null }
+}
+
+export function renderOrderShipped(data: Record<string, unknown> | null | undefined): RenderedEmail {
+  return renderOrderStatus(data, EMAIL_TEMPLATES.ORDER_SHIPPED, {
+    heading: "Your order is on its way",
+    subject: (store, display) =>
+      store ? `Your order #${display} from ${store} is on its way` : `Your order #${display} is on its way`,
+    intro: (_store, display, order) => {
+      const phone = oneLine(order.shipping_address?.phone, 40)
+      const call = phone
+        ? `The courier will call ${phone} before arriving.`
+        : "The courier will call you before arriving."
+      return `Good news: your order #${display} has been shipped. ${call} You pay in cash when it is delivered, so please keep the amount ready.`
+    },
+    details: true,
+    footer: (store) =>
+      store
+        ? `You received this email because you placed an order at ${store}.`
+        : "You received this email because you placed an order.",
+  })
+}
+
+export function renderOrderCanceled(data: Record<string, unknown> | null | undefined): RenderedEmail {
+  return renderOrderStatus(data, EMAIL_TEMPLATES.ORDER_CANCELED, {
+    heading: "Your order was canceled",
+    subject: (store, display) =>
+      store ? `Your order #${display} from ${store} was canceled` : `Your order #${display} was canceled`,
+    intro: (store, display) =>
+      `Your order #${display} was canceled${store ? ` by ${store}` : ""}. You do not need to pay anything. ` +
+      (store
+        ? `If you think this is a mistake, please contact ${store}.`
+        : "If you think this is a mistake, please contact the shop."),
+    details: false,
+    footer: (store) =>
+      store
+        ? `You received this email because you placed an order at ${store}.`
+        : "You received this email because you placed an order.",
+  })
+}
+
+// -------------------------------------------------------------
 // Emails with a 6 digit code (email confirmation, password reset)
 // -------------------------------------------------------------
 
@@ -444,6 +598,10 @@ export function renderEmail(
   switch (template) {
     case EMAIL_TEMPLATES.ORDER_PLACED:
       return renderOrderPlaced(data)
+    case EMAIL_TEMPLATES.ORDER_SHIPPED:
+      return renderOrderShipped(data)
+    case EMAIL_TEMPLATES.ORDER_CANCELED:
+      return renderOrderCanceled(data)
     case EMAIL_TEMPLATES.EMAIL_VERIFICATION:
       return renderEmailVerification(data)
     case EMAIL_TEMPLATES.PASSWORD_RESET:

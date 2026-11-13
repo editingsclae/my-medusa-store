@@ -47,7 +47,7 @@ export type OrderConfirmationNotification = {
 
 // Only what the email needs is stored with the notification. The rest of the
 // order (billing address, payment details) is not copied into it.
-function pickOrder(order: EmailOrder): EmailOrder {
+export function pickOrder(order: EmailOrder): EmailOrder {
   return {
     id: order.id,
     display_id: order.display_id ?? null,
