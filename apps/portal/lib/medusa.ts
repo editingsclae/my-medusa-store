@@ -253,6 +253,34 @@ export function removeStoredToken() {
   document.cookie = "merchant_token=; path=/; max-age=0"
 }
 
+// An API answer that was not ok. `status` is the HTTP status (401 = the session
+// is over).
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+  }
+}
+
+// Pages a signed out merchant is allowed to see
+const AUTH_PAGES = ["/login", "/forgot-password", "/forget-password"]
+
+let sessionEnding = false
+
+// Ends the session in this tab: the token is removed and the merchant goes to
+// the login page ("expired" adds a short notice there). Does nothing on the
+// login pages themselves, so a stale token can never cause a redirect loop.
+export function endSession(reason: "expired" | "signed_out" = "expired") {
+  if (typeof window === "undefined") return
+  removeStoredToken()
+  if (sessionEnding) return
+  if (AUTH_PAGES.some((page) => window.location.pathname.startsWith(page))) return
+  sessionEnding = true
+  window.location.replace(reason === "expired" ? "/login?expired=1" : "/login")
+}
+
 // Base Fetch Helper
 async function apiFetch<T>(
   endpoint: string,
@@ -260,8 +288,9 @@ async function apiFetch<T>(
 ): Promise<T> {
   const token = getStoredToken()
   const headers = new Headers(options.headers || {})
+  const isAuthCall = endpoint.startsWith("/auth/")
 
-  if (token && !headers.has("Authorization")) {
+  if (token && !isAuthCall && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`)
   }
 
@@ -283,7 +312,12 @@ async function apiFetch<T>(
     } catch {
       // ignore
     }
-    throw new Error(errorMsg)
+    // The token is no longer valid: back to the login page instead of an error
+    // on every page. A wrong password on the login call is not this case.
+    if (res.status === 401 && token && !isAuthCall) {
+      endSession("expired")
+    }
+    throw new ApiError(errorMsg, res.status)
   }
 
   return res.json() as Promise<T>

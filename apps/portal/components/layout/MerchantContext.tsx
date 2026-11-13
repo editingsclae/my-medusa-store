@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getMerchantMe, MerchantProfile } from '@/lib/medusa';
+import { endSession, getMerchantMe, getStoredToken, MerchantProfile } from '@/lib/medusa';
 
 interface MerchantState {
   profile: MerchantProfile | null;
@@ -25,7 +25,23 @@ export function MerchantProvider({ children }: { children: React.ReactNode }) {
     failed: false,
   });
 
+  // Signed out, or signed out in another tab: back to the login page
   useEffect(() => {
+    if (!getStoredToken()) {
+      endSession('signed_out');
+      return;
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'merchant_token' && !e.newValue) {
+        endSession('signed_out');
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!getStoredToken()) return;
     let alive = true;
     getMerchantMe()
       .then((profile) => {
