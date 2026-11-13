@@ -53,8 +53,15 @@ function toMerchantProfile(res: MerchantMeResponse): MerchantProfile {
 }
 
 export interface MerchantAnalytics {
+  // The period the numbers below cover (7, 30 or 90 days)
+  days: number
+  // Revenue and orders of that period
   total_sales: number
   total_orders: number
+  // Every order since the shop opened
+  all_time_sales: number
+  all_time_orders: number
+  // Open work right now, over all orders
   pending_orders: number
   fulfilled_orders: number
   currency_code: string
@@ -393,8 +400,10 @@ export async function getMerchantMe(): Promise<MerchantProfile> {
 }
 
 // Analytics
-export async function getMerchantAnalytics(): Promise<MerchantAnalytics> {
-  const res = await apiFetch<{ analytics: MerchantAnalytics }>("/admin/merchant/analytics")
+export type AnalyticsDays = 7 | 30 | 90
+
+export async function getMerchantAnalytics(days: AnalyticsDays = 7): Promise<MerchantAnalytics> {
+  const res = await apiFetch<{ analytics: MerchantAnalytics }>(`/admin/merchant/analytics?days=${days}`)
   return res.analytics
 }
 

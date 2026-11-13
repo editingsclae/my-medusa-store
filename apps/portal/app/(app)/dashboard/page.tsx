@@ -9,8 +9,14 @@ import PendingFulfillment from '@/components/dashboard/PendingFulfillment';
 import TopProducts from '@/components/dashboard/TopProducts';
 import { Skeleton, SkeletonCard, LoadingRegion } from '@/components/ui/Skeleton';
 import { DailyRevenue, KpiData } from '@/lib/dashboard-data';
-import { getMerchantAnalytics, getMerchantProducts, MerchantAnalytics } from '@/lib/medusa';
+import { AnalyticsDays, getMerchantAnalytics, getMerchantProducts, MerchantAnalytics } from '@/lib/medusa';
 import { CalendarIcon, PlusIcon } from '@/components/icons';
+
+const PERIODS: { days: AnalyticsDays; label: string }[] = [
+  { days: 7, label: 'Last 7 days' },
+  { days: 30, label: 'Last 30 days' },
+  { days: 90, label: 'Last 90 days' },
+];
 
 function formatMoney(amount: number, currencyCode: string): string {
   return `${Number(amount).toFixed(2)} ${(currencyCode || '').toUpperCase()}`.trim();
@@ -65,6 +71,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [days, setDays] = useState<AnalyticsDays>(7);
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -75,7 +82,7 @@ export default function DashboardPage() {
       setError(null);
       try {
         const [data, productsRes] = await Promise.all([
-          getMerchantAnalytics(),
+          getMerchantAnalytics(days),
           getMerchantProducts({ limit: 100 }).catch(() => null),
         ]);
 
@@ -118,7 +125,7 @@ export default function DashboardPage() {
     return () => {
       alive = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, days]);
 
   // Everything below is built from the real answer only. There is no sample data: while
   // the request runs the page shows skeletons, and if it fails it says so.
@@ -130,7 +137,7 @@ export default function DashboardPage() {
         {
           title: 'Total revenue',
           value: formatMoney(analytics.total_sales, currency),
-          deltaCaption: 'Store total sales',
+          deltaCaption: `${formatMoney(analytics.all_time_sales, currency)} all time`,
           iconName: 'dollar',
           sparklineSeries: dailySales.map((d) => d.sales || 0),
           sparklineAriaLabel: 'Revenue trend',
@@ -138,7 +145,7 @@ export default function DashboardPage() {
         {
           title: 'Orders',
           value: String(analytics.total_orders),
-          deltaCaption: 'Orders placed',
+          deltaCaption: `${analytics.all_time_orders} all time`,
           iconName: 'cart',
           sparklineSeries: dailySales.map((d) => d.count || 0),
           sparklineAriaLabel: 'Orders trend',
@@ -168,25 +175,56 @@ export default function DashboardPage() {
     <>
       {/* Page Header */}
       <PageHeader title="Dashboard">
-        <div
+        <label
           style={{
+            position: 'relative',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             boxSizing: 'border-box',
             height: '44px',
-            padding: '0 16px',
+            padding: '0 36px 0 16px',
             border: '1px solid #E6E8EC',
             borderRadius: '22px',
             background: '#FFFFFF',
             fontSize: '16px',
             fontWeight: 500,
             color: '#374151',
+            cursor: 'pointer',
           }}
         >
           <CalendarIcon />
-          Last 7 days
-        </div>
+          <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+            Period
+          </span>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value) as AnalyticsDays)}
+            style={{
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              border: 0,
+              outline: 'none',
+              background: 'transparent',
+              font: 'inherit',
+              color: 'inherit',
+              cursor: 'pointer',
+              paddingRight: '4px',
+            }}
+          >
+            {PERIODS.map((p) => (
+              <option key={p.days} value={p.days}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <span
+            aria-hidden="true"
+            style={{ position: 'absolute', right: '16px', fontSize: '12px', color: '#6B7280', pointerEvents: 'none' }}
+          >
+            ▾
+          </span>
+        </label>
 
         <Link
           href="/products/new"
@@ -212,7 +250,7 @@ export default function DashboardPage() {
         </Link>
       </PageHeader>
 
-      {loading ? (
+      {loading && !analytics ? (
         <DashboardSkeleton />
       ) : !analytics ? (
         <div style={{ padding: '0 16px 17px 24px' }}>
@@ -257,7 +295,12 @@ export default function DashboardPage() {
             flexDirection: 'column',
             gap: '20px',
             padding: '0 16px 17px 24px',
+            // Changing the period keeps the old numbers on screen, dimmed, until the new ones arrive
+            opacity: loading ? 0.55 : 1,
+            transition: 'opacity 0.15s ease',
+            pointerEvents: loading ? 'none' : 'auto',
           }}
+          aria-busy={loading}
         >
           {/* 1) KPI tiles */}
           <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '20px' }}>

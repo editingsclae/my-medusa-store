@@ -1,14 +1,50 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { getMerchantContext } from "../utils"
+import {
+  parseDays,
+  periodStart,
+  summarizeOrders,
+  topProducts,
+  type AnalyticsOrder,
+} from "../analytics-rules"
 
+// Orders are read page by page, so a shop with thousands of orders is counted in
+// full. The limit is only a safety stop (200 pages = 100 000 orders).
+const PAGE_SIZE = 500
+const MAX_PAGES = 200
+
+async function readAllOrders(
+  query: any,
+  fields: string[],
+  filters: Record<string, any>
+): Promise<AnalyticsOrder[]> {
+  const orders: AnalyticsOrder[] = []
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data } = await query.graph({
+      entity: "order",
+      fields,
+      filters,
+      pagination: { skip: page * PAGE_SIZE, take: PAGE_SIZE, order: { created_at: "ASC", id: "ASC" } },
+    })
+    orders.push(...(data as AnalyticsOrder[]))
+    if (data.length < PAGE_SIZE) break
+  }
+  return orders
+}
+
+// GET /admin/merchant/analytics?days=7|30|90
+// Revenue, orders, the daily chart and the top products cover the last `days`
+// days. "All time" totals and the pending / shipped counts cover every order.
+// Canceled orders are in none of these numbers.
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const context = await getMerchantContext(req)
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  const days = parseDays(req.query.days)
+  const now = new Date()
 
   const filters: Record<string, any> = {
-    // Canceled orders are not sales: leave them out of revenue, order counts,
-    // the daily chart and top products.
+    // Canceled orders are not sales: they stay out of every number below
     status: { $nin: ["draft", "canceled"] },
   }
 
@@ -16,86 +52,30 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     filters["sales_channel_id"] = context.salesChannelId
   }
 
-  const { data: orders } = await query.graph({
-    entity: "order",
-    fields: [
+  // Every order, without its items: totals, the chart and the open work
+  const orders = await readAllOrders(
+    query,
+    [
       "id",
       "total",
       "status",
+      "created_at",
       "fulfillments.id",
       "fulfillments.shipped_at",
       "fulfillments.delivered_at",
       "fulfillments.canceled_at",
-      "created_at",
-      "currency_code",
-      "items.title",
-      "items.quantity",
-      "items.thumbnail",
     ],
-    filters,
-    pagination: {
-      take: 1000,
-      order: {
-        created_at: "ASC",
-      },
-    },
-  })
+    filters
+  )
+  const summary = summarizeOrders(orders, days, now)
 
-  let totalSales = 0
-  let pendingOrders = 0
-  let fulfilledOrders = 0
-  const dailyMap: Record<string, { date: string; sales: number; count: number }> = {}
-
-  // Initialize last 7 days
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    const key = d.toISOString().split("T")[0]
-    dailyMap[key] = { date: key, sales: 0, count: 0 }
-  }
-
-  const productSalesMap: Record<string, { title: string; quantity: number; thumbnail?: string | null }> = {}
-
-  for (const order of orders) {
-    const total = Number(order.total) || 0
-    totalSales += total
-
-    // Same stages as the Orders page: no fulfillment, fulfilled, shipped, delivered.
-    // "Awaiting shipping" = not shipped yet; "Fulfilled & shipped" = shipped or delivered.
-    // A canceled order is neither: it is not waiting for anything.
-    if (order.status !== "canceled") {
-      const activeFulfillments = (((order as any).fulfillments || []) as any[]).filter(
-        (f) => f && !f.canceled_at
-      )
-      const isShipped = activeFulfillments.some((f) => f.shipped_at || f.delivered_at)
-      if (isShipped) {
-        fulfilledOrders++
-      } else {
-        pendingOrders++
-      }
-    }
-
-    const dayKey = new Date(order.created_at).toISOString().split("T")[0]
-    if (dailyMap[dayKey]) {
-      dailyMap[dayKey].sales += total
-      dailyMap[dayKey].count += 1
-    }
-
-    for (const item of ((order.items || []) as any[])) {
-      if (!item || !item.title) continue
-      if (!productSalesMap[item.title]) {
-        productSalesMap[item.title] = {
-          title: item.title,
-          quantity: 0,
-          thumbnail: item.thumbnail || null,
-        }
-      }
-      productSalesMap[item.title].quantity += Number(item.quantity) || 0
-      if (!productSalesMap[item.title].thumbnail && item.thumbnail) {
-        productSalesMap[item.title].thumbnail = item.thumbnail
-      }
-    }
-  }
+  // Only the orders of the period, with their items: the top products
+  const periodOrders = await readAllOrders(
+    query,
+    ["id", "status", "created_at", "items.title", "items.quantity", "items.thumbnail"],
+    { ...filters, created_at: { $gte: periodStart(days, now).toISOString() } }
+  )
+  const top = topProducts(periodOrders, days, now)
 
   // Lookup thumbnails from catalog if missing on order items
   try {
@@ -114,7 +94,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         catalogThumbMap.set(p.title.toLowerCase().trim(), p.thumbnail)
       }
     }
-    for (const p of Object.values(productSalesMap)) {
+    for (const p of top) {
       if (!p.thumbnail) {
         p.thumbnail = catalogThumbMap.get(p.title.toLowerCase().trim()) || null
       }
@@ -123,19 +103,12 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     console.warn("Could not match catalog thumbnails for top products:", err)
   }
 
-  const topProducts = Object.values(productSalesMap)
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 5)
-
   res.json({
     analytics: {
-      total_sales: totalSales,
-      total_orders: orders.length,
-      pending_orders: pendingOrders,
-      fulfilled_orders: fulfilledOrders,
+      days,
+      ...summary,
       currency_code: context.currencyCode,
-      daily_sales: Object.values(dailyMap),
-      top_products: topProducts,
+      top_products: top,
     },
   })
 }
