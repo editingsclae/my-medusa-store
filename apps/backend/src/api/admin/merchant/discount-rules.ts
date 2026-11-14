@@ -194,3 +194,44 @@ export function discountDescription(merchantId: string): string {
 export function withoutSalePrices<T extends { price_list_id?: string | null }>(prices: T[] | null | undefined): T[] {
   return (prices || []).filter((price) => !price?.price_list_id)
 }
+
+export type VariantPrices = {
+  id: string
+  prices?: (PriceLike & { id?: string | null })[] | null
+}
+
+export type DiscountPricePlan = {
+  create: { variant_id: string; currency_code: string; amount: number }[]
+  update: { id: string; variant_id: string; currency_code: string; amount: number }[]
+  remove: string[]
+}
+
+// What has to change in one discount's price list so every variant's discounted price
+// follows its normal price: a new price for a variant that has none yet, a new amount
+// where the normal price moved, and the price removed where the normal price is gone
+// (or the discount no longer makes it lower).
+export function planDiscountPrices(
+  listId: string,
+  percent: number,
+  currency: string,
+  variants: VariantPrices[]
+): DiscountPricePlan {
+  const wanted = currency.toLowerCase()
+  const plan: DiscountPricePlan = { create: [], update: [], remove: [] }
+  for (const variant of variants) {
+    const base = pickBasePrice(variant.prices, wanted)
+    const target = base === null ? null : salePrice(base, percent)
+    const current = (variant.prices || []).find(
+      (price) => price?.price_list_id === listId && (price.currency_code || "").toLowerCase() === wanted
+    )
+    if (current?.id) {
+      if (target === null) plan.remove.push(current.id)
+      else if (Number(current.amount) !== target) {
+        plan.update.push({ id: current.id, variant_id: variant.id, currency_code: wanted, amount: target })
+      }
+    } else if (target !== null) {
+      plan.create.push({ variant_id: variant.id, currency_code: wanted, amount: target })
+    }
+  }
+  return plan
+}

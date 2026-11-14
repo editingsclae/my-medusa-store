@@ -7,6 +7,7 @@ import { parseBadge, withBadge } from "../../../../product-badge"
 import { parsePrice, parseStock, partialSaveMessage } from "../../product-inputs"
 import { setVariantStock, updateVariantPrice } from "../../product-stock"
 import { applyVariantPlan, planFor, VARIANT_FIELDS } from "../../product-variants"
+import { syncProductDiscounts } from "../../discount-sync"
 import { hasVariantsDraft, parseVariantsDraft, type VariantsDraft } from "../../variant-rules"
 import {
   assertCategoriesOwned,
@@ -276,6 +277,25 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           partialSaveMessage("stock", stockErr)
         )
       }
+    }
+  }
+
+  // A discounted product keeps its discount when the price or variants change:
+  // the discounted prices are worked out again from the new normal prices
+  if (context.salesChannelId) {
+    try {
+      await syncProductDiscounts(
+        req.scope,
+        context.salesChannelId,
+        productId,
+        (body.currency_code || context.currencyCode || "usd").toLowerCase()
+      )
+    } catch (discountErr) {
+      console.error("Failed to update the discount prices:", discountErr)
+      throw new MedusaError(
+        MedusaError.Types.UNEXPECTED_STATE,
+        partialSaveMessage("discount", discountErr)
+      )
     }
   }
 

@@ -4,6 +4,7 @@ import {
   findBlockedProducts,
   parseDiscountInput,
   pickBasePrice,
+  planDiscountPrices,
   readDiscountMetadata,
   salePrice,
   toDiscountMetadata,
@@ -197,5 +198,45 @@ describe("withoutSalePrices", () => {
     const prices = [{ id: "1", price_list_id: "plist_1" }, { id: "2", price_list_id: null }, { id: "3" }]
     expect(withoutSalePrices(prices).map((p) => p.id)).toEqual(["2", "3"])
     expect(withoutSalePrices(undefined)).toEqual([])
+  })
+})
+
+describe("planDiscountPrices", () => {
+  const base = (amount: number) => ({ id: "price_base", currency_code: "tnd", amount })
+  const sale = (amount: number, id = "price_sale") => ({
+    id,
+    currency_code: "tnd",
+    amount,
+    price_list_id: "plist_1",
+  })
+
+  it("moves the discounted price when the normal price changes (1400 -> 1300 at 10%)", () => {
+    const plan = planDiscountPrices("plist_1", 10, "tnd", [{ id: "var_1", prices: [base(1300), sale(1260)] }])
+    expect(plan.update).toEqual([{ id: "price_sale", variant_id: "var_1", currency_code: "tnd", amount: 1170 }])
+    expect(plan.create).toEqual([])
+    expect(plan.remove).toEqual([])
+  })
+
+  it("changes nothing when the discounted price is already right", () => {
+    const plan = planDiscountPrices("plist_1", 10, "tnd", [{ id: "var_1", prices: [base(1400), sale(1260)] }])
+    expect(plan).toEqual({ create: [], update: [], remove: [] })
+  })
+
+  it("gives a variant added later its discounted price", () => {
+    const plan = planDiscountPrices("plist_1", 20, "tnd", [{ id: "var_new", prices: [base(100)] }])
+    expect(plan.create).toEqual([{ variant_id: "var_new", currency_code: "tnd", amount: 80 }])
+  })
+
+  it("removes the discounted price when the normal price is gone", () => {
+    const plan = planDiscountPrices("plist_1", 20, "tnd", [{ id: "var_1", prices: [sale(80)] }])
+    expect(plan.remove).toEqual(["price_sale"])
+  })
+
+  it("ignores the prices of another discount", () => {
+    const other = { id: "price_other", currency_code: "tnd", amount: 50, price_list_id: "plist_2" }
+    const plan = planDiscountPrices("plist_1", 10, "tnd", [{ id: "var_1", prices: [base(100), other] }])
+    expect(plan.create).toEqual([{ variant_id: "var_1", currency_code: "tnd", amount: 90 }])
+    expect(plan.update).toEqual([])
+    expect(plan.remove).toEqual([])
   })
 })
