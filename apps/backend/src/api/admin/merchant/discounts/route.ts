@@ -3,7 +3,6 @@ import {
   ContainerRegistrationKeys,
   MedusaError,
   PriceListStatus,
-  PriceListType,
 } from "@medusajs/framework/utils"
 import { createPriceListsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../utils"
@@ -36,10 +35,14 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   ]
   const productsById = new Map<string, { id: string; title: string; thumbnail: string | null }>()
   if (productIds.length > 0) {
+    const productFilters: Record<string, any> = {
+      id: productIds,
+      sales_channels: { id: merchantId },
+    }
     const { data: products } = await query.graph({
       entity: "product",
       fields: ["id", "title", "thumbnail"],
-      filters: { id: productIds, sales_channels: { id: merchantId } },
+      filters: productFilters,
     })
     for (const product of products as any[]) {
       productsById.set(product.id, { id: product.id, title: product.title, thumbnail: product.thumbnail ?? null })
@@ -83,10 +86,14 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const currency = context.currencyCode.toLowerCase()
 
   // Only products of this merchant, so one merchant can never discount another's
+  const productFilters: Record<string, any> = {
+    id: input.productIds,
+    sales_channels: { id: merchantId },
+  }
   const { data: found } = await query.graph({
     entity: "product",
     fields: ["id", "title", "variants.id", "variants.prices.*"],
-    filters: { id: input.productIds, sales_channels: { id: merchantId } },
+    filters: productFilters,
   })
   const products = found as any[]
 
@@ -142,7 +149,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           title: input.title,
           description: discountDescription(merchantId),
           status: PriceListStatus.ACTIVE,
-          type: PriceListType.SALE,
+          // No "type": a price list is a sale by default, which is what keeps the
+          // normal price as original_amount next to the lower calculated_amount
           starts_at: input.startsAt ? input.startsAt.toISOString() : null,
           ends_at: input.endsAt ? input.endsAt.toISOString() : null,
           prices,
