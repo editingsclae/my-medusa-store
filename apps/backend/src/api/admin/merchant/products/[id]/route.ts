@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { updateProductsWorkflow, deleteProductsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../utils"
+import { withoutSalePrices } from "../../discount-rules"
 import { parseBadge, withBadge } from "../../../../product-badge"
 import { parsePrice, parseStock, partialSaveMessage } from "../../product-inputs"
 import { setVariantStock, updateVariantPrice } from "../../product-stock"
@@ -81,6 +82,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     }
     return {
       ...v,
+      // A sale price (a discount) is not the product's own price
+      prices: withoutSalePrices(v.prices),
       inventory_quantity: totalStock,
     }
   })

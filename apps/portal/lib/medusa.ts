@@ -507,6 +507,44 @@ export async function deleteMerchantCategory(id: string): Promise<{ id: string; 
   })
 }
 
+// Discounts: a percentage off chosen products for a while. The storefront shows the
+// normal price and the lower price next to each other.
+export type DiscountStatus = "scheduled" | "active" | "ended"
+
+export interface MerchantDiscount {
+  id: string
+  title: string
+  percent: number
+  starts_at: string | null
+  ends_at: string | null
+  status: DiscountStatus
+  products: { id: string; title: string; thumbnail?: string | null }[]
+  created_at?: string | null
+}
+
+export async function getMerchantDiscounts(): Promise<{ discounts: MerchantDiscount[]; count: number }> {
+  return apiFetch("/admin/merchant/discounts")
+}
+
+export async function createMerchantDiscount(data: {
+  percent: number
+  product_ids: string[]
+  // "YYYY-MM-DD", both optional
+  starts_at?: string
+  ends_at?: string
+  title?: string
+}): Promise<{ discount: MerchantDiscount }> {
+  return apiFetch("/admin/merchant/discounts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteMerchantDiscount(id: string): Promise<{ id: string; object: string; deleted: boolean }> {
+  return apiFetch(`/admin/merchant/discounts/${id}`, { method: "DELETE" })
+}
+
 // Media Upload (Cloudflare R2)
 // Single upload — appends file once under "files" field only.
 // No silent fallback: if the merchant endpoint succeeds but returns no URL we throw immediately

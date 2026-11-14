@@ -10,6 +10,7 @@ import {
   CategoryIcon,
   OrdersIcon,
   CouponsIcon,
+  DiscountIcon,
   SettingsIcon,
   LogoutIcon,
   MerchantsIcon,
@@ -26,6 +27,7 @@ export default function Sidebar() {
   const isProductsActive = pathname === '/products' || pathname.startsWith('/products/');
   const isCustomersActive = pathname === '/customers' || pathname.startsWith('/customers/');
   const isCategoriesActive = pathname === '/categories' || pathname.startsWith('/categories/');
+  const isDiscountsActive = pathname === '/discounts' || pathname.startsWith('/discounts/');
   const isOrdersActive = pathname === '/orders' || pathname.startsWith('/orders/');
   const isMerchantsActive = pathname === '/merchants' || pathname.startsWith('/merchants/');
   const isSettingsActive = pathname === '/settings' || pathname.startsWith('/settings/');
@@ -264,6 +266,45 @@ export default function Sidebar() {
             <OrdersIcon />
           </span>
           Orders
+        </Link>
+
+        {/* Discounts */}
+        <Link
+          href="/discounts"
+          aria-current={isDiscountsActive ? 'page' : undefined}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            height: '48px',
+            boxSizing: 'border-box',
+            padding: '0 6px',
+            borderRadius: '24px',
+            background: isDiscountsActive ? 'var(--accent)' : 'transparent',
+            color: isDiscountsActive ? '#FFFFFF' : '#F1F3F8',
+            textDecoration: 'none',
+            fontSize: '16px',
+            fontWeight: 500,
+          }}
+        >
+          <span
+            style={{
+              width: '36px',
+              height: '36px',
+              boxSizing: 'border-box',
+              borderRadius: '50%',
+              border: isDiscountsActive ? '1px solid rgba(255,255,255,0.5)' : '1px solid #2B3245',
+              background: isDiscountsActive ? 'rgba(255,255,255,0.14)' : '#0B1020',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 'none',
+              color: '#FFFFFF',
+            }}
+          >
+            <DiscountIcon />
+          </span>
+          Discounts
         </Link>
 
         {/* Coupons */}

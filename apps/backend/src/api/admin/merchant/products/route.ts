@@ -9,6 +9,7 @@ import { hasVariantsDraft, parseVariantsDraft, variantTitle, type VariantsDraft 
 import { assertCategoriesOwned, onlyOwnedCategories } from "../category-access"
 import { getDefaultShippingProfileId } from "../fulfillment"
 import { parseBadge, withBadge } from "../../../product-badge"
+import { withoutSalePrices } from "../discount-rules"
 import { baseHandle, isHandleTakenError, pickAvailableHandle, withRandomTag } from "../product-handle"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -95,6 +96,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       }
       return {
         ...v,
+        // A sale price (a discount) is not the product's own price
+        prices: withoutSalePrices(v.prices),
         inventory_quantity: totalStock,
       }
     })
