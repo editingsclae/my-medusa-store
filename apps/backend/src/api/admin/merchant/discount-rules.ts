@@ -200,57 +200,36 @@ export type VariantPrices = {
   prices?: (PriceLike & { id?: string | null })[] | null
 }
 
-export type DiscountPricePlan = {
-  create: { variant_id: string; currency_code: string; amount: number }[]
-  update: { id: string; variant_id: string; currency_code: string; amount: number }[]
-  remove: string[]
-}
+export type NewDiscountPrice = { variant_id: string; currency_code: string; amount: number }
 
-// What has to change in one discount's price list so every variant's discounted price
-// follows its normal price: a new price for a variant that has none yet, a new amount
-// where the normal price moved, and the price removed where the normal price is gone
-// (or the discount no longer makes it lower).
-export function planDiscountPrices(
-  listId: string,
+// The discounted price of every variant that has a normal price the discount can lower.
+// Prices that belong to this discount's own price list (listed in listPriceIds) are never
+// taken for a normal price, even when they do not say which price list they are from.
+export function wantedDiscountPrices(
   percent: number,
   currency: string,
-  variants: VariantPrices[]
-): DiscountPricePlan {
+  variants: VariantPrices[],
+  listPriceIds: Set<string> = new Set()
+): NewDiscountPrice[] {
   const wanted = currency.toLowerCase()
-  const plan: DiscountPricePlan = { create: [], update: [], remove: [] }
+  const result: NewDiscountPrice[] = []
   for (const variant of variants) {
-    const base = pickBasePrice(variant.prices, wanted)
-    const target = base === null ? null : salePrice(base, percent)
-    const current = (variant.prices || []).find(
-      (price) => price?.price_list_id === listId && (price.currency_code || "").toLowerCase() === wanted
-    )
-    if (current?.id) {
-      if (target === null) plan.remove.push(current.id)
-      else if (Number(current.amount) !== target) {
-        plan.update.push({ id: current.id, variant_id: variant.id, currency_code: wanted, amount: target })
-      }
-    } else if (target !== null) {
-      plan.create.push({ variant_id: variant.id, currency_code: wanted, amount: target })
-    }
+    const own = (variant.prices || []).filter((price) => !(price?.id && listPriceIds.has(price.id)))
+    const base = pickBasePrice(own, wanted)
+    const sale = base === null ? null : salePrice(base, percent)
+    if (sale !== null) result.push({ variant_id: variant.id, currency_code: wanted, amount: sale })
   }
-  return plan
+  return result
 }
 
-// Everything that has to change in a discount's price list when the merchant edits the
-// discount: the products that stay get the new percentage (see planDiscountPrices), and
-// the products that were taken out lose every price this discount gave them.
-export function planDiscountEdit(
-  listId: string,
-  percent: number,
-  currency: string,
-  kept: VariantPrices[],
-  removed: VariantPrices[]
-): DiscountPricePlan {
-  const plan = planDiscountPrices(listId, percent, currency, kept)
-  for (const variant of removed) {
+// The ids of the prices this discount already gave these variants, found two ways: they
+// say they belong to the price list, or the price list says they are its own.
+export function discountPriceIdsOf(listId: string, listPriceIds: Set<string>, variants: VariantPrices[]): string[] {
+  const ids = new Set<string>()
+  for (const variant of variants) {
     for (const price of variant.prices || []) {
-      if (price?.price_list_id === listId && price.id) plan.remove.push(price.id)
+      if (price?.id && (price.price_list_id === listId || listPriceIds.has(price.id))) ids.add(price.id)
     }
   }
-  return plan
+  return [...ids]
 }

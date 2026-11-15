@@ -1,13 +1,10 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
-import {
-  batchPriceListPricesWorkflow,
-  deletePriceListsWorkflow,
-  updatePriceListsWorkflow,
-} from "@medusajs/core-flows"
+import { deletePriceListsWorkflow, updatePriceListsWorkflow } from "@medusajs/core-flows"
 import { getMerchantContext } from "../../utils"
 import { requireSalesChannelId } from "../../category-access"
 import { findMerchantPriceList, listMerchantPriceLists, toDate } from "../../discount-access"
+import { readListPriceIds, replaceListPrices } from "../../discount-sync"
 import { findForeignIds } from "../../ownership"
 import {
   discountDescription,
@@ -15,10 +12,11 @@ import {
   findBlockedProducts,
   parseDiscountInput,
   pickBasePrice,
-  planDiscountEdit,
+  discountPriceIdsOf,
   readDiscountMetadata,
   salePrice,
   toDiscountMetadata,
+  wantedDiscountPrices,
   type ExistingDiscount,
 } from "../../discount-rules"
 
@@ -142,16 +140,16 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
   const keptVariants = products.flatMap((product) => product.variants || [])
 
-  const plan = planDiscountEdit(id, input.percent, currency, keptVariants, removedVariants)
+  // Every price the discount has is removed and the right ones are made again, so no
+  // old price can stay in force. Prices first, then the details: if a step fails, saving
+  // again works everything out from what is there, so it finishes the job.
+  const listPriceIds = await readListPriceIds(query, id)
+  const allVariants = [...keptVariants, ...removedVariants]
+  const removeIds = [...new Set([...listPriceIds, ...discountPriceIdsOf(id, listPriceIds, allVariants)])]
+  const create = wantedDiscountPrices(input.percent, currency, keptVariants, listPriceIds)
 
-  // Prices first, then the details: if the second step fails, saving again works the
-  // same plan out from what is there, so it finishes the job
   try {
-    if (plan.create.length || plan.update.length || plan.remove.length) {
-      await batchPriceListPricesWorkflow(req.scope).run({
-        input: { data: { id, create: plan.create, update: plan.update, delete: plan.remove } },
-      })
-    }
+    await replaceListPrices(req.scope, id, removeIds, create)
     await updatePriceListsWorkflow(req.scope).run({
       input: {
         price_lists_data: [
