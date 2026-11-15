@@ -562,6 +562,50 @@ export async function deleteMerchantDiscount(id: string): Promise<{ id: string; 
   return apiFetch(`/admin/merchant/discounts/${id}`, { method: "DELETE" })
 }
 
+// Coupons: a code the shopper types in the cart for a percentage or an amount off the order
+export type CouponStatus = "scheduled" | "active" | "expired" | "used_up"
+
+export interface MerchantCoupon {
+  id: string
+  code: string
+  kind: "percent" | "fixed"
+  value: number
+  currency_code: string | null
+  starts_at: string | null
+  ends_at: string | null
+  max_uses: number | null
+  used: number
+  per_customer: boolean
+  min_order: number | null
+  status: CouponStatus
+}
+
+export async function getMerchantCoupons(): Promise<{ coupons: MerchantCoupon[]; count: number }> {
+  return apiFetch("/admin/merchant/coupons")
+}
+
+export async function createMerchantCoupon(data: {
+  code: string
+  kind: "percent" | "fixed"
+  value: number
+  // "YYYY-MM-DD", all optional
+  starts_at?: string
+  ends_at?: string
+  max_uses?: number
+  min_order?: number
+  per_customer?: boolean
+}): Promise<{ coupon: MerchantCoupon }> {
+  return apiFetch("/admin/merchant/coupons", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteMerchantCoupon(id: string): Promise<{ id: string; object: string; deleted: boolean }> {
+  return apiFetch(`/admin/merchant/coupons/${id}`, { method: "DELETE" })
+}
+
 // Media Upload (Cloudflare R2)
 // Single upload — appends file once under "files" field only.
 // No silent fallback: if the merchant endpoint succeeds but returns no URL we throw immediately
