@@ -235,3 +235,22 @@ export function planDiscountPrices(
   }
   return plan
 }
+
+// Everything that has to change in a discount's price list when the merchant edits the
+// discount: the products that stay get the new percentage (see planDiscountPrices), and
+// the products that were taken out lose every price this discount gave them.
+export function planDiscountEdit(
+  listId: string,
+  percent: number,
+  currency: string,
+  kept: VariantPrices[],
+  removed: VariantPrices[]
+): DiscountPricePlan {
+  const plan = planDiscountPrices(listId, percent, currency, kept)
+  for (const variant of removed) {
+    for (const price of variant.prices || []) {
+      if (price?.price_list_id === listId && price.id) plan.remove.push(price.id)
+    }
+  }
+  return plan
+}

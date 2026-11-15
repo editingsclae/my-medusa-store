@@ -541,6 +541,23 @@ export async function createMerchantDiscount(data: {
   })
 }
 
+// Changes a discount: the same body as creating one, and it replaces what the discount was
+export async function updateMerchantDiscount(
+  id: string,
+  data: {
+    percent: number
+    product_ids: string[]
+    starts_at?: string
+    ends_at?: string
+  }
+): Promise<{ discount: MerchantDiscount }> {
+  return apiFetch(`/admin/merchant/discounts/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+}
+
 export async function deleteMerchantDiscount(id: string): Promise<{ id: string; object: string; deleted: boolean }> {
   return apiFetch(`/admin/merchant/discounts/${id}`, { method: "DELETE" })
 }

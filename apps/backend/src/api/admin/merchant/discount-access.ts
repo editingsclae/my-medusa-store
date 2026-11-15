@@ -36,3 +36,15 @@ export async function listMerchantPriceLists(query: any, merchantId: string): Pr
   }
   return rows.filter((row) => readDiscountMetadata(row.metadata, merchantId))
 }
+
+// One of the merchant's discounts, or null. Another merchant's discount looks exactly
+// like one that does not exist.
+export async function findMerchantPriceList(query: any, merchantId: string, id: string): Promise<PriceListRow | null> {
+  const { data } = await query.graph({
+    entity: "price_list",
+    fields: ["id", "title", "status", "starts_at", "ends_at", "created_at", "metadata"],
+    filters: { id, description: discountDescription(merchantId) },
+  })
+  const row = (data as PriceListRow[])?.[0]
+  return row && readDiscountMetadata(row.metadata, merchantId) ? row : null
+}

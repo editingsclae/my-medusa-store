@@ -14,10 +14,13 @@ import {
   getMerchantProducts,
   MerchantDiscount,
   MerchantProduct,
+  updateMerchantDiscount,
 } from '@/lib/medusa';
 import { discountedPrice, formatAmount, periodText, priceRange } from '@/lib/discounts';
 
 const QUICK_PERCENTS = [10, 15, 20, 25, 30, 50];
+
+const GRID = '110px minmax(200px, 1.4fr) minmax(180px, 1fr) 120px 170px';
 
 const STATUS_STYLE: Record<MerchantDiscount['status'], { label: string; background: string; color: string }> = {
   active: { label: 'Active', background: '#E8F7EE', color: '#17803F' },
@@ -64,6 +67,10 @@ export default function DiscountsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
+  // The discount being changed, or null when the form makes a new one
+  const [editing, setEditing] = useState<MerchantDiscount | null>(null);
+  // Names of the chosen products, so they can be listed even when the picker does not show them
+  const [chosenTitles, setChosenTitles] = useState<Map<string, string>>(new Map());
   const [percent, setPercent] = useState<number | ''>(20);
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
@@ -121,19 +128,25 @@ export default function DiscountsPage() {
 
   const percentValid = typeof percent === 'number' && Number.isInteger(percent) && percent >= 1 && percent <= 90;
 
-  const toggle = (id: string) => {
+  const toggle = (id: string, title?: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+    if (title) setChosenTitles((prev) => new Map(prev).set(id, title));
   };
 
   const visibleIds = useMemo(() => products.map((p) => p.id), [products]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
 
   const toggleAllVisible = () => {
+    setChosenTitles((prev) => {
+      const next = new Map(prev);
+      products.forEach((p) => next.set(p.id, p.title));
+      return next;
+    });
     setSelected((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
@@ -144,14 +157,33 @@ export default function DiscountsPage() {
 
   const resetForm = () => {
     setShowForm(false);
+    setEditing(null);
     setPercent(20);
     setStartsAt('');
     setEndsAt('');
     setSelected(new Set());
+    setChosenTitles(new Map());
     setSearch('');
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  // Opens the form filled with the discount, to change it
+  const startEdit = (discount: MerchantDiscount) => {
+    const day = (iso: string | null) =>
+      iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Africa/Tunis' }) : '';
+    setEditing(discount);
+    setPercent(discount.percent);
+    setStartsAt(day(discount.starts_at));
+    setEndsAt(day(discount.ends_at));
+    setSelected(new Set(discount.products.map((p) => p.id)));
+    setChosenTitles(new Map(discount.products.map((p) => [p.id, p.title])));
+    setSearch('');
+    setError(null);
+    setNotice(null);
+    setShowForm(true);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setNotice(null);
@@ -170,17 +202,24 @@ export default function DiscountsPage() {
 
     setSaving(true);
     try {
-      await createMerchantDiscount({
+      const body = {
         percent,
         product_ids: [...selected],
         starts_at: startsAt || undefined,
         ends_at: endsAt || undefined,
-      });
-      setNotice(`${percent}% off is set on ${selected.size} ${selected.size === 1 ? 'product' : 'products'}.`);
+      };
+      const what = `${percent}% off is set on ${selected.size} ${selected.size === 1 ? 'product' : 'products'}.`;
+      if (editing) {
+        await updateMerchantDiscount(editing.id, body);
+        setNotice(`The discount was updated: ${what}`);
+      } else {
+        await createMerchantDiscount(body);
+        setNotice(what);
+      }
       resetForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the discount.');
+      setError(err instanceof Error ? err.message : `Could not ${editing ? 'update' : 'create'} the discount.`);
     } finally {
       setSaving(false);
     }
@@ -210,6 +249,7 @@ export default function DiscountsPage() {
           <button
             type="button"
             onClick={() => {
+              resetForm();
               setShowForm(true);
               setError(null);
               setNotice(null);
@@ -255,11 +295,13 @@ export default function DiscountsPage() {
       )}
 
       {showForm && (
-        <form onSubmit={handleCreate} style={{ ...card, padding: '24px', gap: '24px' }}>
+        <form onSubmit={handleSubmit} style={{ ...card, padding: '24px', gap: '24px' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>New discount</h2>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>{editing ? 'Edit discount' : 'New discount'}</h2>
             <p style={{ ...hintStyle, fontSize: '14px' }}>
-              Shoppers see the normal price crossed out next to the lower price on the products you choose.
+              {editing
+                ? 'Changes apply right away. Products you take out go back to their normal price.'
+                : 'Shoppers see the normal price crossed out next to the lower price on the products you choose.'}
             </p>
           </div>
 
@@ -314,7 +356,7 @@ export default function DiscountsPage() {
                 <input
                   type="date"
                   value={startsAt}
-                  min={todayInput()}
+                  min={editing ? undefined : todayInput()}
                   onChange={(e) => setStartsAt(e.target.value)}
                   style={inputStyle}
                 />
@@ -347,6 +389,40 @@ export default function DiscountsPage() {
                 style={{ ...inputStyle, width: '280px', maxWidth: '100%' }}
               />
             </div>
+
+            {selected.size > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                {[...selected].map((id) => (
+                  <span
+                    key={id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      maxWidth: '260px',
+                      padding: '4px 6px 4px 12px',
+                      borderRadius: '14px',
+                      background: '#F3F4F6',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: '#1F2937',
+                    }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {chosenTitles.get(id) || 'Product'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggle(id)}
+                      aria-label={`Remove ${chosenTitles.get(id) || 'product'} from this discount`}
+                      style={{ width: '20px', height: '20px', border: 0, borderRadius: '10px', background: 'transparent', fontSize: '16px', lineHeight: 1, color: '#6B7280', cursor: 'pointer' }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div style={{ marginTop: '12px', border: '1px solid #EDEFF3', borderRadius: '16px', overflow: 'hidden' }}>
               <label
@@ -391,7 +467,7 @@ export default function DiscountsPage() {
                           cursor: 'pointer',
                         }}
                       >
-                        <input type="checkbox" checked={selected.has(product.id)} onChange={() => toggle(product.id)} />
+                        <input type="checkbox" checked={selected.has(product.id)} onChange={() => toggle(product.id, product.title)} />
                         <span style={{ width: '40px', height: '40px', flex: 'none' }}>
                           <Thumbnail src={product.thumbnail} />
                         </span>
@@ -460,10 +536,14 @@ export default function DiscountsPage() {
               }}
             >
               {saving
-                ? 'Creating...'
-                : percentValid && selected.size > 0
-                  ? `Apply ${percent}% off to ${selected.size} ${selected.size === 1 ? 'product' : 'products'}`
-                  : 'Apply discount'}
+                ? editing
+                  ? 'Saving...'
+                  : 'Creating...'
+                : editing
+                  ? 'Save changes'
+                  : percentValid && selected.size > 0
+                    ? `Apply ${percent}% off to ${selected.size} ${selected.size === 1 ? 'product' : 'products'}`
+                    : 'Apply discount'}
             </button>
           </div>
         </form>
@@ -478,11 +558,11 @@ export default function DiscountsPage() {
         </div>
 
         <div style={{ overflowX: 'auto', marginTop: '16px' }}>
-          <div style={{ minWidth: '640px' }}>
+          <div style={{ minWidth: '720px' }}>
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '110px minmax(200px, 1.4fr) minmax(180px, 1fr) 120px 110px',
+                gridTemplateColumns: GRID,
                 alignItems: 'center',
                 height: '40px',
                 padding: '0 24px',
@@ -506,7 +586,7 @@ export default function DiscountsPage() {
                     key={i}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '110px minmax(200px, 1.4fr) minmax(180px, 1fr) 120px 110px',
+                      gridTemplateColumns: GRID,
                       alignItems: 'center',
                       minHeight: '64px',
                       padding: '8px 24px',
@@ -564,7 +644,7 @@ export default function DiscountsPage() {
                       key={discount.id}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '110px minmax(200px, 1.4fr) minmax(180px, 1fr) 120px 110px',
+                        gridTemplateColumns: GRID,
                         alignItems: 'center',
                         minHeight: '64px',
                         padding: '8px 24px',
@@ -601,7 +681,27 @@ export default function DiscountsPage() {
                           {status.label}
                         </span>
                       </span>
-                      <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <span style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        {discount.status !== 'ended' && (
+                          <button
+                            type="button"
+                            onClick={() => startEdit(discount)}
+                            style={{
+                              height: '34px',
+                              padding: '0 16px',
+                              borderRadius: '17px',
+                              border: '1px solid #E6E8EC',
+                              background: '#FFFFFF',
+                              fontFamily: 'inherit',
+                              fontSize: '14px',
+                              fontWeight: 600,
+                              color: '#374151',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setToRemove(discount)}

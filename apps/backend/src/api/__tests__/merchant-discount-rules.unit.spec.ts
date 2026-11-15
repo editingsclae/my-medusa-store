@@ -4,6 +4,7 @@ import {
   findBlockedProducts,
   parseDiscountInput,
   pickBasePrice,
+  planDiscountEdit,
   planDiscountPrices,
   readDiscountMetadata,
   salePrice,
@@ -237,6 +238,34 @@ describe("planDiscountPrices", () => {
     const plan = planDiscountPrices("plist_1", 10, "tnd", [{ id: "var_1", prices: [base(100), other] }])
     expect(plan.create).toEqual([{ variant_id: "var_1", currency_code: "tnd", amount: 90 }])
     expect(plan.update).toEqual([])
+    expect(plan.remove).toEqual([])
+  })
+})
+
+describe("planDiscountEdit", () => {
+  const sale = (id: string, amount: number) => ({ id, currency_code: "tnd", amount, price_list_id: "plist_1" })
+  const base = (amount: number) => ({ id: "price_base", currency_code: "tnd", amount })
+
+  it("gives the products that stay the new percentage", () => {
+    const plan = planDiscountEdit("plist_1", 30, "tnd", [{ id: "var_1", prices: [base(100), sale("ps_1", 80)] }], [])
+    expect(plan.update).toEqual([{ id: "ps_1", variant_id: "var_1", currency_code: "tnd", amount: 70 }])
+    expect(plan.create).toEqual([])
+    expect(plan.remove).toEqual([])
+  })
+
+  it("puts the products taken out back to their normal price", () => {
+    const plan = planDiscountEdit("plist_1", 20, "tnd", [], [{ id: "var_2", prices: [base(50), sale("ps_2", 40)] }])
+    expect(plan.remove).toEqual(["ps_2"])
+  })
+
+  it("discounts a product that was added", () => {
+    const plan = planDiscountEdit("plist_1", 20, "tnd", [{ id: "var_3", prices: [base(200)] }], [])
+    expect(plan.create).toEqual([{ variant_id: "var_3", currency_code: "tnd", amount: 160 }])
+  })
+
+  it("leaves the prices of another discount alone when a product is taken out", () => {
+    const other = { id: "ps_other", currency_code: "tnd", amount: 10, price_list_id: "plist_2" }
+    const plan = planDiscountEdit("plist_1", 20, "tnd", [], [{ id: "var_2", prices: [base(50), other] }])
     expect(plan.remove).toEqual([])
   })
 })
