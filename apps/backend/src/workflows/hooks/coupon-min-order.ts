@@ -30,7 +30,7 @@ completeCartWorkflow.hooks.validate(async ({ input }, { container }) => {
       const minOrder = typeof meta.min_order === "number" && meta.min_order > 0 ? meta.min_order : null
       const message = minOrderProblem(minOrder, subtotal, cart.currency_code || "")
       if (message) {
-        problem = `${promotion.code}: ${message}`
+        problem = message
         break
       }
     }
