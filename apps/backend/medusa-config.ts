@@ -5,6 +5,9 @@ loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
+    // With REDIS_URL, admin/store sessions live in Redis and survive restarts
+    // and deploys. Without it Medusa keeps them in memory (fine for local dev).
+    redisUrl: process.env.REDIS_URL,
     databaseDriverOptions: process.env.DATABASE_DRIVER_OPTIONS
       ? JSON.parse(process.env.DATABASE_DRIVER_OPTIONS)
       : {
@@ -27,6 +30,37 @@ module.exports = defineConfig({
     },
   ],
   modules: [
+    // Redis-backed event bus, cache, workflow engine and locking. They are only
+    // registered when REDIS_URL is set, so local development runs without Redis.
+    ...(process.env.REDIS_URL
+      ? [
+          {
+            resolve: '@medusajs/medusa/event-bus-redis',
+            options: { redisUrl: process.env.REDIS_URL },
+          },
+          {
+            resolve: '@medusajs/medusa/cache-redis',
+            options: { redisUrl: process.env.REDIS_URL },
+          },
+          {
+            resolve: '@medusajs/medusa/workflow-engine-redis',
+            options: { redis: { url: process.env.REDIS_URL } },
+          },
+          {
+            resolve: '@medusajs/medusa/locking',
+            options: {
+              providers: [
+                {
+                  resolve: '@medusajs/medusa/locking-redis',
+                  id: 'locking-redis',
+                  is_default: true,
+                  options: { redisUrl: process.env.REDIS_URL },
+                },
+              ],
+            },
+          },
+        ]
+      : []),
     ...(process.env.S3_BUCKET
       ? [
           {
