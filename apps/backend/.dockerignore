@@ -1,0 +1,12 @@
+node_modules
+.medusa
+.git
+.turbo
+.env
+.env.*
+!.env.template
+dist
+build
+coverage
+integration-tests
+public/admin
