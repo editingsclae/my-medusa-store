@@ -8,23 +8,10 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  // Allow access to remote image placeholder.
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'media.getcardy.shop',
-        port: '',
-        pathname: '/**',
-      },
-    ],
-  },
+  // The portal renders images with plain <img> tags and ships no next/image
+  // components or public/ images, so no remote image hosts are allowed. This
+  // keeps the /_next/image optimizer (sharp) from fetching and decoding remote
+  // files. Add remotePatterns back only if next/image is introduced.
   output: process.env.DOCKER_BUILD === 'true' ? 'standalone' : undefined,
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
