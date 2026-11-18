@@ -3,7 +3,9 @@
 # No secret is passed as a build argument. Dokploy gives the Environment tab
 # values to the RUNNING container only, so they never end up in the image.
 # The same steps as before (nixpacks.toml): install, medusa build, copy the admin.
-FROM node:24-bookworm
+# Pinned to a digest so a base-image or npm change cannot alter the build by
+# surprise. To update: pull node:24-bookworm, copy its new digest here, test.
+FROM node:24-bookworm@sha256:9d266751ca3d7fdbe651c878ffd5ad0a42fed49a18c283509267c97f025b7496
 
 WORKDIR /app
 ENV NODE_ENV=production
