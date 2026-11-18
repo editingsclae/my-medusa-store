@@ -21,11 +21,11 @@ WORKDIR /repo
 FROM base AS deps
 ENV CI=true
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-# pnpm checks the lockfile against every workspace project, so all three
-# manifests are needed even though only the portal is installed.
+# Only the portal's manifest is copied on purpose. With the backend manifest
+# present, --frozen-lockfile also checks the backend's lockfile entry, which is
+# not maintained with pnpm (the backend uses npm) and fails the install.
+# Tested with the workspace file unchanged: the install is strict and passes.
 COPY apps/portal/package.json ./apps/portal/
-COPY apps/backend/package.json ./apps/backend/
-COPY apps/storefront/package.json ./apps/storefront/
 RUN pnpm install --frozen-lockfile --filter @dtc/portal...
 
 FROM base AS builder
