@@ -26,7 +26,6 @@ const nextConfig: NextConfig = {
     ],
   },
   output: process.env.DOCKER_BUILD === 'true' ? 'standalone' : undefined,
-  transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify—file watching is disabled to prevent flickering during agent edits.
