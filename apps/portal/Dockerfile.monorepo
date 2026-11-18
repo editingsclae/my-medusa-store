@@ -1,0 +1,53 @@
+# Portal image built from the repository ROOT, so the install uses the same
+# pnpm-lock.yaml as local development (exact versions) instead of resolving the
+# dependencies fresh with npm on every deploy.
+#
+# Dokploy (merchant-portal service):
+#   Build Path          /
+#   Docker File         apps/portal/Dockerfile.monorepo
+#   Docker Context Path .
+# Keep "Create Environment File" on: Dokploy writes the Environment tab into
+# apps/portal/.env (next to this Dockerfile), where `next build` reads
+# NEXT_PUBLIC_MEDUSA_BACKEND_URL. The build stops with a clear message if it is
+# missing, instead of shipping a portal that points nowhere.
+#
+# Rollback: Build Path /apps/portal, Docker File Dockerfile, Context empty.
+
+FROM node:24-alpine AS base
+# Same pnpm version as the root package.json "packageManager".
+RUN npm install -g pnpm@10.11.1
+WORKDIR /repo
+
+FROM base AS deps
+ENV CI=true
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+# pnpm checks the lockfile against every workspace project, so all three
+# manifests are needed even though only the portal is installed.
+COPY apps/portal/package.json ./apps/portal/
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/storefront/package.json ./apps/storefront/
+RUN pnpm install --frozen-lockfile --filter @dtc/portal...
+
+FROM base AS builder
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/apps/portal/node_modules ./apps/portal/node_modules
+COPY package.json pnpm-workspace.yaml .npmrc ./
+COPY apps/portal ./apps/portal
+WORKDIR /repo/apps/portal
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN grep -q '^NEXT_PUBLIC_MEDUSA_BACKEND_URL=' .env || { echo "ERROR: NEXT_PUBLIC_MEDUSA_BACKEND_URL is missing. Set it in the Dokploy Environment tab and keep Create Environment File on." >&2; exit 1; }
+RUN pnpm run build
+
+FROM base AS runner
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+WORKDIR /repo
+COPY --from=builder /repo/node_modules ./node_modules
+COPY --from=builder /repo/apps/portal/node_modules ./apps/portal/node_modules
+COPY --from=builder /repo/apps/portal/.next ./apps/portal/.next
+COPY --from=builder /repo/apps/portal/package.json ./apps/portal/package.json
+COPY --from=builder /repo/apps/portal/public* ./apps/portal/public
+WORKDIR /repo/apps/portal
+EXPOSE 3000
+CMD ["npm", "run", "start"]
