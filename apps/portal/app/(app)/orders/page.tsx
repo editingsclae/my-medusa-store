@@ -305,14 +305,12 @@ export default function OrdersPage() {
   const handleMarkShipped = async () => {
     if (!detailOrder) return;
     setActionLoading(true);
-    const trackingNo = `GC-${Math.floor(48000 + Math.random() * 500)}`;
     const fulId = detailOrder.fulfillments?.[0]?.id;
     try {
       await shipMerchantOrder(detailOrder.id, {
         fulfillment_id: fulId,
-        tracking_number: trackingNo,
       });
-      setNotice(`Marked as shipped. Tracking ${trackingNo} added.`);
+      setNotice('Marked as shipped.');
       await refreshDetail(detailOrder.id);
     } catch (err: any) {
       alert(`Mark as shipped failed: ${err.message || 'Unknown error'}`);
@@ -1494,8 +1492,12 @@ export default function OrdersPage() {
                   </dd>
                   <dt style={{ color: '#4B5263' }}>Provider</dt>
                   <dd style={{ margin: 0, color: '#111827' }}>{fulfillmentProvider}</dd>
-                  <dt style={{ color: '#4B5263' }}>Tracking</dt>
-                  <dd style={{ margin: 0, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>{trackingNumber}</dd>
+                  {trackingNumber && (
+                    <>
+                      <dt style={{ color: '#4B5263' }}>Tracking</dt>
+                      <dd style={{ margin: 0, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>{trackingNumber}</dd>
+                    </>
+                  )}
                 </dl>
               ) : (
                 <p style={{ margin: 0, padding: '0 24px 8px', fontSize: '16px', fontWeight: 500, color: '#4B5263' }}>
