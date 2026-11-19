@@ -9,6 +9,10 @@ FROM node:24-bookworm@sha256:9d266751ca3d7fdbe651c878ffd5ad0a42fed49a18c28350926
 
 WORKDIR /app
 ENV NODE_ENV=production
+# Medusa's anonymous usage telemetry (project and machine ids, OS, Node and
+# Medusa versions). Set here so it is off for the build and for the server.
+# https://docs.medusajs.com/resources/usage
+ENV MEDUSA_DISABLE_TELEMETRY=true
 
 # Install first, so this layer is reused when only the source changes.
 # patch-package (postinstall) needs the patches folder.
