@@ -1,20 +1,26 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# GetCardy merchant portal
 
-# Run and deploy your AI Studio app
+Next.js merchant back office for GetCardy. It talks to the Medusa backend
+(`apps/backend`) through `NEXT_PUBLIC_MEDUSA_BACKEND_URL`.
 
-This contains everything you need to run your app locally.
+## Run locally
 
-View your app in AI Studio: https://ai.studio/apps/0eb69298-44ea-4331-8736-fe292e95649f
+Prerequisites: Node.js >= 22.22 and pnpm 10.11.1 (see `packageManager` in the
+root `package.json`).
 
-## Run Locally
+1. From the repository root, install the portal's dependencies:
+   `pnpm install --filter @dtc/portal...`
+2. Copy `.env.example` to `.env` and set `NEXT_PUBLIC_MEDUSA_BACKEND_URL`.
+3. Start the dev server: `pnpm --filter @dtc/portal dev`
 
-**Prerequisites:**  Node.js
+Other scripts: `pnpm --filter @dtc/portal build`, `lint` and `start`.
 
+## Deploy (Dokploy)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+The image is built from the repository root with `Dockerfile.monorepo`, which
+installs from the root `pnpm-lock.yaml`. See the comment at the top of that
+file for the exact Dokploy settings (Build Path, Docker File, Docker Context
+Path) and the rollback to `apps/portal/Dockerfile`.
+
+`NEXT_PUBLIC_MEDUSA_BACKEND_URL` is baked into the build, so changing it needs
+a new deploy, not just a restart.
