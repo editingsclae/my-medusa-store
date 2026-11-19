@@ -1,0 +1,57 @@
+# Smaller backend image: multi-stage build on node:24-bookworm-slim.
+#
+# Same layout and start command as the Dockerfile next to it (runs from /app
+# with "npm run start"), but the final image:
+#  - uses the slim Node base (333 MB) instead of the full Debian one,
+#  - does not carry the build layers or npm's download cache (about 180 MB in
+#    the old image), only the finished /app is copied over.
+# node_modules is NOT pruned on purpose: the server starts from the project
+# root and may need dev packages (TypeScript loaders) at run time. Prune in a
+# separate, tested step if the image is still too big.
+#
+# Dokploy (store-medusabackend):
+#   Build Path          /apps/backend
+#   Docker File         Dockerfile.multistage
+#   Docker Context Path (empty)
+# Rollback: set Docker File back to "Dockerfile" and deploy.
+#
+# No secret is passed as a build argument. Dokploy gives the Environment tab
+# values to the RUNNING container only, so they never end up in the image.
+# The base is pinned to a digest, in BOTH FROM lines. To update: docker pull
+# node:24-bookworm-slim, copy the digest from
+#   docker inspect --format '{{index .RepoDigests 0}}' node:24-bookworm-slim
+# into both lines, test.
+
+FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS builder
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV MEDUSA_DISABLE_TELEMETRY=true
+
+# Install first, so this layer is reused when only the source changes.
+# patch-package (postinstall) needs the patches folder.
+COPY package.json package-lock.json ./
+COPY patches ./patches
+RUN npm ci --include=dev --legacy-peer-deps
+
+COPY . .
+
+# medusa build needs no secret: the config is compiled and reads the variables at run time.
+RUN npm run build \
+ && mkdir -p public \
+ && rm -rf ./public/admin \
+ && cp -r .medusa/server/public/admin ./public/admin
+
+
+FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV MEDUSA_DISABLE_TELEMETRY=true
+
+COPY --from=builder /app ./
+
+EXPOSE 9000
+
+# "start" runs the database migrations and then the server (see package.json).
+CMD ["npm", "run", "start"]
