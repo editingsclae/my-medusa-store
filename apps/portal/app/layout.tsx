@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
-import { Urbanist } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 
-const urbanist = Urbanist({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+// Self-hosted so the build never has to download the font from Google Fonts.
+// One variable file (latin subset, weights 100-900), see app/fonts/README.md.
+const urbanist = localFont({
+  src: './fonts/urbanist-latin.woff2',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
 });
 
