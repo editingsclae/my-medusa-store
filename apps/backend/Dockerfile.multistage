@@ -15,6 +15,12 @@
 #   Docker Context Path (empty)
 # Rollback: set Docker File back to "Dockerfile" and deploy.
 #
+# The runner installs curl because the Dokploy health check is
+#   curl -f http://localhost:9000/health
+# and the slim base does not ship it. Without curl the container is marked
+# unhealthy and Swarm rolls the deploy back. If the health check is ever
+# changed to something that does not need curl, the install can go.
+#
 # No secret is passed as a build argument. Dokploy gives the Environment tab
 # values to the RUNNING container only, so they never end up in the image.
 # The base is pinned to a digest, in BOTH FROM lines. To update: docker pull
@@ -44,6 +50,12 @@ RUN npm run build \
 
 
 FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runner
+
+# curl is needed by the health check (see the header). ca-certificates is listed
+# explicitly because apt only "recommends" it for curl.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ENV NODE_ENV=production
