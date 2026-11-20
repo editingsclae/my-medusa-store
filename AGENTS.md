@@ -2,7 +2,7 @@
 
 ## Overview
 
-Medusa DTC Starter — a Turborepo workspace monorepo containing a Medusa backend (`@medusajs/medusa` latest, Node 20+, PostgreSQL 15+) and an optional storefront (Next.js, Tanstack, etc...).
+Medusa DTC Starter — a Turborepo workspace monorepo containing a Medusa backend (`@medusajs/medusa` latest, Node 20+, PostgreSQL 15+) and the merchant portal (Next.js). Merchant storefronts live in their own repositories.
 
 ## Directory Structure
 
@@ -21,12 +21,12 @@ Medusa DTC Starter — a Turborepo workspace monorepo containing a Medusa backen
 │   │       ├── modules/          # Custom modules (service + models + migrations)
 │   │       ├── subscribers/      # Event subscribers
 │   │       └── workflows/        # Workflows and workflow steps
-│   └── storefront/               # OPTIONAL storefront
+│   └── portal/                   # Merchant portal (Next.js, @dtc/portal)
 ├── eslint.config.ts              # Root ESLint: @medusajs/eslint-plugin recommended
 ├── turbo.json                    # Task graph: build, dev, start, lint, test, seed
 ```
 
-**`apps/storefront` is optional and may not exist.** It is skipped when the user chooses not to install it. Before running any storefront command, referencing storefront files, or assuming a full-stack change is possible, check that `apps/storefront/` exists. If it doesn't, the project is backend-only — do not scaffold it or suggest it was deleted by mistake.
+**There is no storefront in this repository.** Each merchant storefront has its own repository. Do not scaffold one under `apps/`.
 
 Each app can have its own nested `AGENTS.md`; agents read the nearest one in the directory tree, so put app-specific context there rather than expanding this file.
 
@@ -53,7 +53,6 @@ Run from the repo root unless noted. Turbo skips missing apps automatically.
 ```bash
 <pm> run dev                # all apps
 <pm> run backend:dev        # backend only (http://localhost:9000, admin at /app)
-<pm> run storefront:dev     # storefront only (http://localhost:8000)
 ```
 
 ### Build
@@ -68,10 +67,9 @@ Run from the repo root unless noted. Turbo skips missing apps automatically.
 ```bash
 <pm> run lint                          # all apps via turbo
 cd apps/backend && <pm> run lint       # medusa lint
-cd apps/storefront && <pm> run lint    # next lint
 ```
 
-### Test (backend only; the storefront has no test suite)
+### Test (backend only)
 
 ```bash
 <pm> run test                                              # all test tasks via turbo
@@ -105,7 +103,6 @@ These are optional but strongly recommended — they give documentation-backed a
 
 - `building-with-medusa` — any backend work: modules, API routes, workflows, data models, module links
 - `building-admin-dashboard-customizations` — anything under `apps/backend/src/admin`
-- `building-storefronts` — anything under `apps/storefront`
 - `db-generate` / `db-migrate` / `new-user` — the DB and user commands above
 
 If they are not installed, suggest:
@@ -136,12 +133,11 @@ claude mcp add --transport http medusa https://docs.medusajs.com/mcp # or agent 
 
 ## Common Mistakes
 
-- Running storefront commands without checking that `apps/storefront/` exists.
 - Assuming a package manager instead of detecting it, or running a command that creates a second lockfile.
 - Installing a dependency at the root instead of inside the app that needs it (`cd apps/backend && <pm> add <pkg>`).
 - Editing a custom module's model without running `<pm> exec medusa db:generate <module>` — the migration is missing and the change silently never applies.
 - Writing raw SQL or importing DB clients directly in the backend instead of going through module services / workflows.
-- Calling the Medusa API from the storefront without `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY`; requests fail with a publishable-key error, not an obvious 401.
+- Calling the Medusa API from a storefront (in its own repo) without `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY`; requests fail with a publishable-key error, not an obvious 401.
 - Running the test task without a reachable PostgreSQL — integration suites need a live DB.
 - Silencing `@medusajs/*` ESLint rules instead of fixing the underlying pattern.
 

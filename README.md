@@ -40,7 +40,7 @@
 
 # Medusa DTC Starter
 
-A production-ready monorepo starter for direct-to-consumer ecommerce stores powered by Medusa and Next.js. Includes a fully featured storefront with product browsing, cart, checkout, customer accounts, and order management.
+GetCardy monorepo, built on the Medusa DTC starter: the Medusa backend (`apps/backend`) and the merchant portal (`apps/portal`). Merchant storefronts live in their own repositories.
 
 ## Features
 
@@ -113,44 +113,11 @@ pnpm dev
 
 7. Open the admin dashboard at `localhost:9000/app` and log in. Retrieve your publishable API key at Settings > Publishable API key.
 
-8. Set up environment variables for the storefront:
+8. Set up and start the merchant portal: see [apps/portal/README.md](apps/portal/README.md).
 
-```bash
-cp apps/storefront/.env.template apps/storefront/.env.local
-```
-
-9. Update `apps/storefront/.env.local` with your Medusa publishable API key:
-
-```bash
-NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=pk_6c3...
-```
-
-10.  Start storefront:
-
-```bash
-cd apps/storefront
-pnpm dev
-```
-
-The storefront runs on `http://localhost:8000`.
-
-You can slo run the following command from the root to start both backend and storefront:
-
-```bash
-pnpm dev
-```
-
-## Configuration
-
-The storefront is configured via environment variables in `apps/storefront/.env.local`:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Publishable API key from your Medusa backend | — |
-| `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | URL of your Medusa backend | `http://localhost:9000` |
-| `NEXT_PUBLIC_DEFAULT_REGION` | Default region country code | `dk` |
-| `NEXT_PUBLIC_BASE_URL` | Base URL of the storefront | `https://localhost:8000` |
-| `NEXT_PUBLIC_STRIPE_KEY` | Stripe publishable key (optional) | — |
+Storefronts are not part of this repository. Each one has its own repository and
+needs the publishable API key from step 7 (`NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY`)
+and the backend URL (`NEXT_PUBLIC_MEDUSA_BACKEND_URL`).
 
 ## Resources
 
