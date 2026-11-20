@@ -32,6 +32,41 @@
   </a>
 </p>
 
+## GetCardy backend: deploy (Dokploy)
+
+The backend runs as the Dokploy service `store-medusabackend`, built from
+`Dockerfile.multistage` in this folder. The comment at the top of that file is
+the reference for the exact settings and the base-image update steps.
+
+Dokploy settings:
+
+- Build Type: Dockerfile
+- Build Path: `/apps/backend`
+- Docker File: `Dockerfile.multistage`
+- Docker Context Path: empty
+
+How it works:
+
+- Environment variables come from the Dokploy Environment tab and reach the
+  running container only. No secret is passed as a build argument.
+- The image has two stages on `node:24-bookworm-slim`, pinned by digest in both
+  `FROM` lines: `builder` runs `npm ci` and `medusa build`, `runner` receives
+  the finished `/app`. Dependencies are installed with npm from
+  `package-lock.json` (`--legacy-peer-deps`); the Medusa packages are pinned to
+  exact versions.
+- The container starts with `npm run start`, which is
+  `medusa db:migrate && medusa start`, so pending migrations run on every start.
+- The Dokploy health check is `curl -f http://localhost:9000/health`. The slim
+  base has no curl, so the runner stage installs it. If the health check
+  changes to something that does not need curl, that install can go.
+
+Deploy behaviour: a failed build leaves the running container untouched. If a
+new container starts but fails its health check, Swarm rolls back and the old
+one keeps serving.
+
+Rollback: while `Dockerfile` (the earlier single-stage image) is still in this
+folder, set Docker File back to `Dockerfile`, save and deploy.
+
 ## Compatibility
 
 This starter is compatible with versions >= 2 of `@medusajs/medusa`. 
