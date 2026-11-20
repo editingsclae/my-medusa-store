@@ -1,8 +1,0 @@
-[phases.install]
-cmds = ["yarn install --no-immutable"]
-
-[phases.build]
-cmds = ["npx next build"]
-
-[start]
-cmd = "npx next start -p 8000"
