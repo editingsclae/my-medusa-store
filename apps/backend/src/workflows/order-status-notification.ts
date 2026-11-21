@@ -2,7 +2,15 @@
 // they can be unit tested on their own. They use the same order fields and the
 // same shape as the order confirmation.
 import { EMAIL_TEMPLATES, type EmailOrder } from "../modules/resend/email-templates"
-import { pickOrder, type OrderConfirmationNotification } from "./order-confirmation-notification"
+import {
+  ORDER_CONFIRMATION_FIELDS,
+  pickOrder,
+  type OrderConfirmationNotification,
+} from "./order-confirmation-notification"
+
+// The order fields to read for the shipped and canceled emails: the confirmation
+// fields plus the tracking number the merchant may have entered when shipping.
+export const ORDER_STATUS_FIELDS = [...ORDER_CONFIRMATION_FIELDS, "fulfillments.labels.tracking_number"]
 
 export type OrderStatusKind = "shipped" | "canceled"
 

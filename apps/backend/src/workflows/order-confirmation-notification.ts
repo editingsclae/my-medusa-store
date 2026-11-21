@@ -48,6 +48,12 @@ export type OrderConfirmationNotification = {
 // Only what the email needs is stored with the notification. The rest of the
 // order (billing address, payment details) is not copied into it.
 export function pickOrder(order: EmailOrder): EmailOrder {
+  const fulfillments = (order.fulfillments || []).map((fulfillment) => ({
+    labels: (fulfillment?.labels || []).map((label) => ({
+      tracking_number: label?.tracking_number ?? null,
+    })),
+  }))
+
   return {
     id: order.id,
     display_id: order.display_id ?? null,
@@ -79,6 +85,7 @@ export function pickOrder(order: EmailOrder): EmailOrder {
     shipping_methods: (order.shipping_methods || []).map((method) => ({
       name: method.name ?? null,
     })),
+    ...(fulfillments.length > 0 ? { fulfillments } : {}),
     item_subtotal: order.item_subtotal,
     shipping_subtotal: order.shipping_subtotal,
     discount_total: order.discount_total,

@@ -7,8 +7,11 @@ import {
   sendNotificationsStep,
   useQueryGraphStep,
 } from "@medusajs/medusa/core-flows"
-import { ORDER_CONFIRMATION_FIELDS } from "./order-confirmation-notification"
-import { buildOrderStatusNotification, type OrderStatusKind } from "./order-status-notification"
+import {
+  buildOrderStatusNotification,
+  ORDER_STATUS_FIELDS,
+  type OrderStatusKind,
+} from "./order-status-notification"
 
 type WorkflowInput = {
   id: string
@@ -22,7 +25,7 @@ export const sendOrderStatusWorkflow = createWorkflow(
   ({ id, kind }: WorkflowInput) => {
     const { data: orders } = useQueryGraphStep({
       entity: "order",
-      fields: ORDER_CONFIRMATION_FIELDS,
+      fields: ORDER_STATUS_FIELDS,
       filters: { id },
       options: { throwIfKeyNotFound: true },
     })

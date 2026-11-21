@@ -55,6 +55,8 @@ export type EmailOrder = {
   items?: EmailOrderItem[] | null
   shipping_address?: EmailOrderAddress | null
   shipping_methods?: Array<{ name?: string | null }> | null
+  // Only the shipped email reads these: the tracking numbers entered when shipping
+  fulfillments?: Array<{ labels?: Array<{ tracking_number?: string | null }> | null }> | null
   item_subtotal?: unknown
   shipping_subtotal?: unknown
   discount_total?: unknown
@@ -350,12 +352,29 @@ ${
 // Order shipped and order canceled
 // -------------------------------------------------------------
 
+// The tracking numbers the merchant entered when shipping the order, without
+// duplicates. Empty when none was entered: the field is optional.
+function trackingNumbers(order: EmailOrder): string[] {
+  const found: string[] = []
+  for (const fulfillment of order.fulfillments || []) {
+    for (const label of fulfillment?.labels || []) {
+      const value = oneLine(label?.tracking_number, 100)
+      if (value && !found.includes(value)) {
+        found.push(value)
+      }
+    }
+  }
+  return found.slice(0, 5)
+}
+
 type OrderStatusCopy = {
   heading: string
   subject: (store: string, display: string) => string
   intro: (store: string, display: string, order: EmailOrder) => string
   // Shipped: where it goes and what to pay. Canceled: neither.
   details: boolean
+  // Shipped: the tracking number, when the merchant entered one. Canceled: never.
+  tracking: boolean
   footer: (store: string) => string
 }
 
@@ -374,6 +393,8 @@ function renderOrderStatus(
   const firstName = oneLine(order.shipping_address?.first_name, 60)
   const lines = orderLines(order)
   const address = copy.details ? addressLines(order.shipping_address) : []
+  const tracking = copy.tracking ? trackingNumbers(order) : []
+  const trackingLabel = tracking.length > 1 ? "Tracking numbers" : "Tracking number"
   const total = formatMoney(order.total, order.currency_code)
 
   const subject = copy.subject(store, display)
@@ -430,6 +451,11 @@ ${
     : ""
 }
 ${
+  tracking.length > 0
+    ? `<tr><td style="padding:20px 28px 0"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#71717a;margin-bottom:6px">${trackingLabel}</div><div style="font-size:14px;line-height:1.6;color:#3f3f46">${tracking.map((value) => escapeHtml(value)).join("<br>")}</div></td></tr>`
+    : ""
+}
+${
   copy.details
     ? `<tr><td style="padding:20px 28px 0"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#71717a;margin-bottom:6px">Payment</div><div style="font-size:14px;line-height:1.6;color:#3f3f46">Cash on delivery: <strong>${escapeHtml(total)}</strong></div></td></tr>`
     : ""
@@ -452,6 +478,9 @@ ${
   if (address.length > 0) {
     textLines.push("", "Delivery address", ...address)
   }
+  if (tracking.length > 0) {
+    textLines.push("", `${trackingLabel}: ${tracking.join(", ")}`)
+  }
   if (copy.details) {
     textLines.push("", `Payment: cash on delivery, ${total}`)
   }
@@ -473,6 +502,7 @@ export function renderOrderShipped(data: Record<string, unknown> | null | undefi
       return `Good news: your order #${display} has been shipped. ${call} You pay in cash when it is delivered, so please keep the amount ready.`
     },
     details: true,
+    tracking: true,
     footer: (store) =>
       store
         ? `You received this email because you placed an order at ${store}.`
@@ -491,6 +521,7 @@ export function renderOrderCanceled(data: Record<string, unknown> | null | undef
         ? `If you think this is a mistake, please contact ${store}.`
         : "If you think this is a mistake, please contact the shop."),
     details: false,
+    tracking: false,
     footer: (store) =>
       store
         ? `You received this email because you placed an order at ${store}.`

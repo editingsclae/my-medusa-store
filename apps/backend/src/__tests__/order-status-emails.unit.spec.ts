@@ -5,7 +5,8 @@ import {
   renderOrderCanceled,
   renderOrderShipped,
 } from "../modules/resend/email-templates"
-import { buildOrderStatusNotification } from "../workflows/order-status-notification"
+import { ORDER_CONFIRMATION_FIELDS } from "../workflows/order-confirmation-notification"
+import { buildOrderStatusNotification, ORDER_STATUS_FIELDS } from "../workflows/order-status-notification"
 
 function order(extra: Record<string, unknown> = {}): any {
   return {
@@ -53,10 +54,47 @@ describe("renderOrderShipped", () => {
     expect(mail.html).toContain("Your order is on its way")
   })
 
-  it("never mentions tracking numbers", () => {
+  it("does not mention tracking when the merchant entered no tracking number", () => {
     const mail = renderOrderShipped({ order: order() })
     expect(mail.text.toLowerCase()).not.toContain("tracking")
     expect(mail.html.toLowerCase()).not.toContain("tracking")
+
+    const empty = renderOrderShipped({
+      order: order({ fulfillments: [{ labels: [] }, { labels: [{ tracking_number: "  " }] }] }),
+    })
+    expect(empty.text.toLowerCase()).not.toContain("tracking")
+    expect(empty.html.toLowerCase()).not.toContain("tracking")
+  })
+
+  it("shows the tracking number the merchant entered", () => {
+    const mail = renderOrderShipped({
+      order: order({ fulfillments: [{ labels: [{ tracking_number: "UG251948854MV" }] }] }),
+    })
+    expect(mail.text).toContain("Tracking number: UG251948854MV")
+    expect(mail.html).toContain("Tracking number")
+    expect(mail.html).toContain("UG251948854MV")
+  })
+
+  it("lists several tracking numbers once each", () => {
+    const mail = renderOrderShipped({
+      order: order({
+        fulfillments: [
+          { labels: [{ tracking_number: "A1" }, { tracking_number: "A1" }] },
+          { labels: [{ tracking_number: "B2" }] },
+        ],
+      }),
+    })
+    expect(mail.text).toContain("Tracking numbers: A1, B2")
+    expect(mail.html).toContain("Tracking numbers")
+  })
+
+  it("escapes the tracking number and keeps it on one line", () => {
+    const mail = renderOrderShipped({
+      order: order({ fulfillments: [{ labels: [{ tracking_number: "<b>X</b>\nBcc: a@b.c" }] }] }),
+    })
+    expect(mail.html).not.toContain("<b>X</b>")
+    expect(mail.html).toContain("&lt;b&gt;X&lt;/b&gt;")
+    expect(mail.text).toContain("Tracking number: <b>X</b> Bcc: a@b.c")
   })
 
   it("works without a phone number or a store name", () => {
@@ -104,6 +142,15 @@ describe("renderOrderCanceled", () => {
     expect(mail.text.toLowerCase()).not.toContain("cash on delivery")
   })
 
+  it("never shows a tracking number", () => {
+    const mail = renderOrderCanceled({
+      order: order({ fulfillments: [{ labels: [{ tracking_number: "UG251948854MV" }] }] }),
+    })
+    expect(mail.text).not.toContain("UG251948854MV")
+    expect(mail.html).not.toContain("UG251948854MV")
+    expect(mail.text.toLowerCase()).not.toContain("tracking")
+  })
+
   it("works without a store name", () => {
     const mail = renderOrderCanceled({ order: order({ sales_channel: null }) })
     expect(mail.text).toContain("was canceled. You do not need to pay anything")
@@ -136,6 +183,19 @@ describe("buildOrderStatusNotification", () => {
     expect(n.idempotency_key).toBe("order-shipped:order_01")
   })
 
+  it("keeps only the tracking numbers of the fulfillments in the notification", () => {
+    const n: any = buildOrderStatusNotification(
+      "shipped",
+      order({ fulfillments: [{ id: "ful_1", shipped_at: "x", labels: [{ tracking_number: "T1", label_url: "u" }] }] })
+    )
+    expect(n.data.order.fulfillments).toEqual([{ labels: [{ tracking_number: "T1" }] }])
+  })
+
+  it("adds no fulfillments to the notification when the order has none", () => {
+    const n: any = buildOrderStatusNotification("shipped", order())
+    expect("fulfillments" in n.data.order).toBe(false)
+  })
+
   it("builds a canceled notification that cannot clash with the shipped one", () => {
     const n: any = buildOrderStatusNotification("canceled", order())
     expect(n.template).toBe("order-canceled")
@@ -157,5 +217,18 @@ describe("buildOrderStatusNotification", () => {
     )
     expect(n.data.order.billing_address).toBeUndefined()
     expect(n.data.order.payment_collections).toBeUndefined()
+  })
+})
+
+describe("ORDER_STATUS_FIELDS", () => {
+  it("reads the tracking number as well as the confirmation fields", () => {
+    expect(ORDER_STATUS_FIELDS).toContain("fulfillments.labels.tracking_number")
+    for (const field of ORDER_CONFIRMATION_FIELDS) {
+      expect(ORDER_STATUS_FIELDS).toContain(field)
+    }
+  })
+
+  it("leaves the order confirmation fields alone", () => {
+    expect(ORDER_CONFIRMATION_FIELDS.some((f) => f.startsWith("fulfillments"))).toBe(false)
   })
 })
