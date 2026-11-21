@@ -147,6 +147,8 @@ export default function OrdersPage() {
   const [openTax, setOpenTax] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  // Optional tracking number typed next to "Mark as shipped".
+  const [trackingInput, setTrackingInput] = useState('');
 
   // Cancel order dialog state
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -207,6 +209,7 @@ export default function OrdersPage() {
     setSelectedOrderId(order.id);
     setDetailOrder(order);
     setNotice(null);
+    setTrackingInput('');
     setOpenShip(false);
     setOpenTax(false);
     setCopiedKey(null);
@@ -228,6 +231,7 @@ export default function OrdersPage() {
     setSelectedOrderId(null);
     setDetailOrder(null);
     setNotice(null);
+    setTrackingInput('');
   };
 
   const handleCopy = (key: string, text: string) => {
@@ -306,10 +310,14 @@ export default function OrdersPage() {
     if (!detailOrder) return;
     setActionLoading(true);
     const fulId = detailOrder.fulfillments?.[0]?.id;
+    // The tracking number is optional: send it only when something was typed.
+    const trackingToSend = trackingInput.trim();
     try {
       await shipMerchantOrder(detailOrder.id, {
         fulfillment_id: fulId,
+        ...(trackingToSend ? { tracking_number: trackingToSend } : {}),
       });
+      setTrackingInput('');
       setNotice('Marked as shipped.');
       await refreshDetail(detailOrder.id);
     } catch (err: any) {
@@ -1562,25 +1570,50 @@ export default function OrdersPage() {
                       </button>
                     )}
                     {stage === 1 && (
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={handleMarkShipped}
-                        style={{
-                          height: '40px',
-                          boxSizing: 'border-box',
-                          padding: '0 22px',
-                          border: 0,
-                          borderRadius: '20px',
-                          background: 'var(--accent)',
-                          color: '#FFFFFF',
-                          fontSize: '15px',
-                          fontWeight: 600,
-                          cursor: actionLoading ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {actionLoading ? 'Updating...' : 'Mark as shipped'}
-                      </button>
+                      <>
+                        <input
+                          type="text"
+                          value={trackingInput}
+                          onChange={(e) => setTrackingInput(e.target.value)}
+                          disabled={actionLoading}
+                          maxLength={100}
+                          placeholder="Tracking number (optional)"
+                          aria-label="Tracking number (optional)"
+                          style={{
+                            height: '40px',
+                            width: '260px',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box',
+                            padding: '0 16px',
+                            border: '1px solid #E6E8EC',
+                            borderRadius: '20px',
+                            background: '#FFFFFF',
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            fontSize: '15px',
+                            color: '#111827',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={handleMarkShipped}
+                          style={{
+                            height: '40px',
+                            boxSizing: 'border-box',
+                            padding: '0 22px',
+                            border: 0,
+                            borderRadius: '20px',
+                            background: 'var(--accent)',
+                            color: '#FFFFFF',
+                            fontSize: '15px',
+                            fontWeight: 600,
+                            cursor: actionLoading ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {actionLoading ? 'Updating...' : 'Mark as shipped'}
+                        </button>
+                      </>
                     )}
                     {stage === 2 && (
                       <button
